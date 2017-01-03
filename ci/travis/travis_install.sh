@@ -61,6 +61,24 @@ test ${python_version} == ${YCM_PYTHON_VERSION}
 pip install -U pip wheel setuptools
 pip install -r python/test_requirements.txt
 
+###########
+# Vim setup
+###########
+
+git clone https://github.com/vim/vim ${TRAVIS_BUILD_DIR}/vim
+pushd ${TRAVIS_BUILD_DIR}/vim
+VIM_CONFIGURE_OPTIONS="--with-features=huge"
+if [ "${YCM_PYTHON_VERSION:0:1}" == "3" ]; then
+  VIM_CONFIGURE_OPTIONS="${VIM_CONFIGURE_OPTIONS} --enable-python3interp"
+else
+  VIM_CONFIGURE_OPTIONS="${VIM_CONFIGURE_OPTIONS} --enable-pythoninterp"
+fi
+./configure ${VIM_CONFIGURE_OPTIONS}
+make -j4
+popd
+export PATH="${TRAVIS_BUILD_DIR}/vim/src:${PATH}"
+vim --version
+
 # The build infrastructure prints a lot of spam after this script runs, so make
 # sure to disable printing, and failing on non-zero exit code after this script
 # finishes
