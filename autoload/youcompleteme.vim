@@ -250,9 +250,53 @@ function! s:SetUpKeyMappings()
   " completion menu is open. We handle this by closing the completion menu on
   " the keys that delete a character in insert mode.
   for key in [ "<BS>", "<C-h>" ]
-    silent! exe 'inoremap <unique> <expr> ' . key .
-          \ ' <SID>OnDeleteChar( "\' . key . '" )'
+    call s:AssignFunctionToKeyInInsertMode( 'OnDeleteChar', key )
   endfor
+endfunction
+
+
+" Assign a function to a key in insert mode in addition to its original function
+" or mapping if already mapped.
+function! s:AssignFunctionToKeyInInsertMode( function, key )
+  " Define internal mappings for the function if they don't already exist.
+  if !hasmapto( '<SID>Ycm' . a:function, 'i' )
+    exe 'inoremap <silent> <SID>Ycm' . a:function .
+          \ ' <C-R>=<SID>' . a:function . '()<CR>'
+    exe 'inoremap <script> <Plug>Ycm' . a:function . ' <SID>Ycm' . a:function
+  endif
+
+  let mapping_dict = maparg( a:key, 'i', 0, 1 )
+  let current_mapping = empty( mapping_dict ) ? a:key : mapping_dict.rhs
+  let mapping_is_recursive = current_mapping =~? a:key
+  let mapping_is_local = !empty( mapping_dict ) && mapping_dict.buffer
+  let mapping_is_silent = !empty( mapping_dict ) && mapping_dict.silent
+
+  " If the key is mapped to itself, use a non-recursive mapping to avoid
+  " infinite recursion.
+  if mapping_is_recursive
+    let mapping_cmd = 'inoremap'
+    let mapping_args = '<script>'
+    let mapping_lhs = a:key
+    let mapping_rhs = '<SID>Ycm' . a:function . current_mapping
+  else
+    let mapping_cmd = 'imap'
+    let mapping_args = ''
+    let mapping_lhs = a:key
+    let mapping_rhs = '<Plug>Ycm' . a:function . current_mapping
+  endif
+
+  if mapping_is_silent
+    let mapping_args .= ' <silent>'
+  endif
+
+  " A local buffer mapping may already exist for the initial buffer before
+  " setting our global mapping. Since a local mapping takes precedence over a
+  " global one, we remove it. Once our global mapping is set, we expect users
+  " and plugins to not override it.
+  if mapping_is_local
+    exe 'iunmap <buffer> ' . mapping_lhs
+  endif
+  exe mapping_cmd . ' ' . mapping_args . ' ' . mapping_lhs . ' ' . mapping_rhs
 endfunction
 
 
@@ -553,12 +597,12 @@ function! s:OnInsertChar()
 endfunction
 
 
-function! s:OnDeleteChar( key )
+function! s:OnDeleteChar()
   call timer_stop( s:pollers.completion.id )
   if pumvisible()
-    return "\<C-y>" . a:key
+    return "\<C-y>"
   endif
-  return a:key
+  return ""
 endfunction
 
 
