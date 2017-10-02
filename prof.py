@@ -41,7 +41,7 @@ def Run():
   vim_command.extend( FormatOption(
     'ycm_profile_python_interpreter',
     'python{0}'.format( '3' if sys.version_info[ 0 ] == 3 else '' ) ) )
-  vim_command.extend( [ '-c', 'source prof/startup.vim' ] )
+  vim_command.extend( [ '-c', 'source prof/diagnostics.vim' ] )
   subprocess.call( vim_command )
   return stats_file
 
