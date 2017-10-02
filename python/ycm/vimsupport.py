@@ -474,15 +474,15 @@ def PostVimMessage( message, warning = True, truncate = False ):
     if len( message ) > vim_width:
       message = message[ : vim_width - 4 ] + '...'
 
-    old_ruler = GetIntValue( '&ruler' )
-    old_showcmd = GetIntValue( '&showcmd' )
-    vim.command( 'set noruler noshowcmd' )
+    #old_ruler = GetIntValue( '&ruler' )
+    #old_showcmd = GetIntValue( '&showcmd' )
+    #vim.command( 'set noruler noshowcmd' )
 
     vim.command( "{0} '{1}'".format( echo_command,
                                      EscapeForVim( message ) ) )
 
-    SetVariableValue( '&ruler', old_ruler )
-    SetVariableValue( '&showcmd', old_showcmd )
+    #SetVariableValue( '&ruler', old_ruler )
+    #SetVariableValue( '&showcmd', old_showcmd )
   else:
     for line in message.split( '\n' ):
       vim.command( "{0} '{1}'".format( echo_command,
