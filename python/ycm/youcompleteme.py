@@ -25,11 +25,14 @@ from builtins import *  # noqa
 
 from future.utils import iteritems
 import base64
+import cProfile
 import json
 import logging
 import os
+import pstats
 import signal
 import vim
+from io import StringIO
 from subprocess import PIPE
 from tempfile import NamedTemporaryFile
 from ycm import base, paths, vimsupport
@@ -117,6 +120,7 @@ class YouCompleteMe( object ):
     self._buffers = BufferDict( user_options )
     self._latest_completion_request = None
     self._logger = logging.getLogger( 'ycm' )
+    self._profiler = cProfile.Profile()
     self._client_logfile = None
     self._server_stdout = None
     self._server_stderr = None
@@ -366,6 +370,7 @@ class YouCompleteMe( object ):
 
 
   def OnFileReadyToParse( self ):
+    self._profiler.enable()
     if not self.IsServerAlive():
       self.NotifyUserIfServerCrashed()
       return
@@ -379,18 +384,23 @@ class YouCompleteMe( object ):
     self._AddExtraConfDataIfNeeded( extra_data )
 
     self.CurrentBuffer().SendParseRequest( extra_data )
+    self._profiler.disable()
 
 
   def OnBufferUnload( self, deleted_buffer_file ):
+    self._profiler.enable()
     SendEventNotificationAsync(
         'BufferUnload',
         filepath = utils.ToUnicode( deleted_buffer_file ) )
+    self._profiler.disable()
 
 
   def OnBufferVisit( self ):
+    self._profiler.enable()
     extra_data = {}
     self._AddUltiSnipsDataIfNeeded( extra_data )
     SendEventNotificationAsync( 'BufferVisit', extra_data = extra_data )
+    self._profiler.disable()
 
 
   def CurrentBuffer( self ):
@@ -398,11 +408,15 @@ class YouCompleteMe( object ):
 
 
   def OnInsertLeave( self ):
+    self._profiler.enable()
     SendEventNotificationAsync( 'InsertLeave' )
+    self._profiler.disable()
 
 
   def OnCursorMoved( self ):
+    self._profiler.enable()
     self.CurrentBuffer().OnCursorMoved()
+    self._profiler.disable()
 
 
   def _CleanLogfile( self ):
@@ -413,18 +427,24 @@ class YouCompleteMe( object ):
 
 
   def OnVimLeave( self ):
+    self._profiler.enable()
     self._ShutdownServer()
     self._CleanLogfile()
+    self._profiler.disable()
 
 
   def OnCurrentIdentifierFinished( self ):
+    self._profiler.enable()
     SendEventNotificationAsync( 'CurrentIdentifierFinished' )
+    self._profiler.disable()
 
 
   def OnCompleteDone( self ):
+    self._profiler.enable()
     complete_done_actions = self.GetCompleteDoneHooks()
     for action in complete_done_actions:
       action(self)
+    self._profiler.disable()
 
 
   def GetCompleteDoneHooks( self ):
@@ -592,6 +612,11 @@ class YouCompleteMe( object ):
 
 
   def DebugInfo( self ):
+    stream = StringIO()
+    stats = pstats.Stats( self._profiler,
+                          stream = stream ).sort_stats( 'cumulative' )
+    stats.print_stats()
+    self._logger.debug( stream.getvalue() )
     debug_info = ''
     if self._client_logfile:
       debug_info += 'Client logfile: {0}\n'.format( self._client_logfile )
