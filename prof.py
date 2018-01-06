@@ -32,7 +32,7 @@ def FormatOption( name, value ):
   return [ '-c', 'let g:{0} = "{1}"'.format( name, value ) ]
 
 
-def Run():
+def Run( args ):
   stats_file = CreateStatsFile()
   vim_executable = PathToFirstExistingExecutable( [ 'gvim', 'vim', 'mvim' ] )
   vim_command = [ vim_executable,
@@ -41,17 +41,10 @@ def Run():
   vim_command.extend( FormatOption(
     'ycm_profile_python_interpreter',
     'python{0}'.format( '3' if sys.version_info[ 0 ] == 3 else '' ) ) )
-  vim_command.extend( [ '-c', 'source prof/diagnostics.vim' ] )
+  vim_command.extend( FormatOption( 'ycm_nb_buffers', str( args.nb_buffers ) ) )
+  vim_command.extend( [ '-c', 'source prof/request.vim' ] )
   subprocess.call( vim_command )
   return stats_file
-
-
-def RemoveBytecode():
-  for root, dirs, files in os.walk( DIR_OF_THIS_SCRIPT ):
-    for name in files:
-      _, extension = os.path.splitext( name )
-      if extension == '.pyc':
-        os.remove( os.path.join( root, name ) )
 
 
 def ParseArguments():
@@ -60,6 +53,8 @@ def ParseArguments():
                        help = 'Number of runs.' )
   parser.add_argument( '--visualize', action = 'store_true',
                        help = 'Visualize profiling data.' )
+  parser.add_argument( 'nb_buffers', type = int,
+                       help = 'Number of buffers already open.' )
   return parser.parse_args()
 
 
@@ -67,39 +62,21 @@ def Main():
   args = ParseArguments()
 
   # Warmup
-  Run()
-
-  # Without bytecode
-  stats_files = []
-  for _ in range( args.runs ):
-    RemoveBytecode()
-    stats_files.append( Run() )
-  stats = pstats.Stats( *stats_files )
-  stats.sort_stats( 'cumulative' )
-  average_startup_time_without_bytecode = int(
-      stats.total_tt * 1000 / args.runs )
-
-  for stats_file in stats_files:
-    os.remove( stats_file )
+  Run( args )
 
   # With bytecode
   stats_files = []
   for _ in range( args.runs ):
-    stats_files.append( Run() )
+    stats_files.append( Run( args ) )
   stats = pstats.Stats( *stats_files )
   stats.sort_stats( 'cumulative' )
-  average_startup_time_with_bytecode = int(
-      stats.total_tt * 1000 / args.runs )
+  average_time_with_bytecode = round( stats.total_tt * 1000 / args.runs, 1 )
 
   for stats_file in stats_files:
     os.remove( stats_file )
 
-  print( 'Average startup time on {0} runs:\n'
-         '  without bytecode: {1}ms\n'
-         '  with bytecode:    {2}ms'.format(
-             args.runs,
-             average_startup_time_without_bytecode,
-             average_startup_time_with_bytecode ) )
+  print( 'Average time to edit a new empty buffer on {0} runs: '
+         '{1}ms\n'.format( args.runs, average_time_with_bytecode ) )
 
   if args.visualize:
     from pyprof2calltree import visualize
