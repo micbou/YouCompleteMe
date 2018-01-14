@@ -2818,7 +2818,7 @@ you are using a correct `libclang.so`. We recommend downloading prebuilt
 binaries from llvm.org.
 
 
-### I get `Fatal Python error: PyThreadState_Get: no current thread` on startup
+### I get `Unexpected exit code -6` on startup
 
 This is caused by linking a static version of `libpython` into ycmd's
 `ycm_core.so`.  This leads to multiple copies of the python interpreter loaded
