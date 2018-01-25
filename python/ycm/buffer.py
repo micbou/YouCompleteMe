@@ -29,7 +29,7 @@ from ycm.diagnostic_interface import DiagnosticInterface
 
 DIAGNOSTIC_UI_FILETYPES = set( [ 'cpp', 'cs', 'c', 'objc', 'objcpp',
                                  'typescript' ] )
-DIAGNOSTIC_UI_ASYNC_FILETYPES = set( [ 'java' ] )
+DIAGNOSTIC_UI_ASYNC_FILETYPES = set( [ 'java', 'rust' ] )
 
 
 # Emulates Vim buffer

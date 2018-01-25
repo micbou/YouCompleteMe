@@ -22,12 +22,14 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
-from ycm.vimsupport import PostVimMessage
-
+from ycm import vimsupport
 from ycm.client.base_request import ( BaseRequest, BuildRequestData,
                                       JsonFromFuture, HandleServerException )
-
+from ycm.scratch import scratch
+from ycmd.utils import ToUnicode
+import os
 import logging
+import vim
 
 _logger = logging.getLogger( __name__ )
 
@@ -80,9 +82,7 @@ def _HandlePollResponse( response, diagnostics_handler ):
   if isinstance( response, list ):
     for notification in response:
       if 'message' in notification:
-        PostVimMessage( notification[ 'message' ],
-                        warning = False,
-                        truncate = True )
+        scratch.UpdateMessage( notification[ 'message' ] )
       elif 'diagnostics' in notification:
         diagnostics_handler.UpdateWithNewDiagnosticsForFile(
           notification[ 'filepath' ],

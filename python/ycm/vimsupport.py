@@ -31,6 +31,7 @@ from collections import defaultdict, namedtuple
 from ycmd.utils import ( ByteOffsetToCodepointOffset, GetCurrentDirectory,
                          JoinLinesAsUnicode, ToBytes, ToUnicode )
 from ycmd import user_options_store
+from ycm.scratch import scratch
 
 BUFFER_COMMAND_MAP = { 'same-buffer'      : 'edit',
                        'horizontal-split' : 'split',
@@ -517,52 +518,6 @@ def NumLinesInBuffer( buffer_object ):
   return len( buffer_object )
 
 
-# Calling this function from the non-GUI thread will sometimes crash Vim. At
-# the time of writing, YCM only uses the GUI thread inside Vim (this used to
-# not be the case).
-def PostVimMessage( message, warning = True, truncate = False ):
-  """Display a message on the Vim status line. By default, the message is
-  highlighted and logged to Vim command-line history (see :h history).
-  Unset the |warning| parameter to disable this behavior. Set the |truncate|
-  parameter to avoid hit-enter prompts (see :h hit-enter) when the message is
-  longer than the window width."""
-  echo_command = 'echom' if warning else 'echo'
-
-  # Displaying a new message while previous ones are still on the status line
-  # might lead to a hit-enter prompt or the message appearing without a
-  # newline so we do a redraw first.
-  vim.command( 'redraw' )
-
-  if warning:
-    vim.command( 'echohl WarningMsg' )
-
-  message = ToUnicode( message )
-
-  if truncate:
-    vim_width = GetIntValue( '&columns' )
-
-    message = message.replace( '\n', ' ' )
-    if len( message ) >= vim_width:
-      message = message[ : vim_width - 4 ] + '...'
-
-    old_ruler = GetIntValue( '&ruler' )
-    old_showcmd = GetIntValue( '&showcmd' )
-    vim.command( 'set noruler noshowcmd' )
-
-    vim.command( "{0} '{1}'".format( echo_command,
-                                     EscapeForVim( message ) ) )
-
-    SetVariableValue( '&ruler', old_ruler )
-    SetVariableValue( '&showcmd', old_showcmd )
-  else:
-    for line in message.split( '\n' ):
-      vim.command( "{0} '{1}'".format( echo_command,
-                                       EscapeForVim( line ) ) )
-
-  if warning:
-    vim.command( 'echohl None' )
-
-
 def PresentDialog( message, choices, default_choice_index = 0 ):
   """Presents the user with a dialog where a choice can be made.
   This will be a dialog for gvim users or a question in the message buffer
@@ -834,8 +789,7 @@ def ReplaceChunks( chunks, silent=False ):
       SetQuickFixList( locations )
       OpenQuickFixList()
 
-    PostVimMessage( 'Applied {0} changes'.format( len( chunks ) ),
-                    warning = False )
+    scratch.UpdateMessage( 'Applied {0} changes'.format( len( chunks ) ) )
 
 
 def ReplaceChunksInBuffer( chunks, vim_buffer ):
@@ -942,7 +896,7 @@ def InsertNamespace( namespace ):
   new_line = "{0}using {1};\n".format( existing_indent, namespace )
   replace_pos = { 'line_num': line + 1, 'column_num': 1 }
   ReplaceChunk( replace_pos, replace_pos, new_line, vim.current.buffer )
-  PostVimMessage( 'Add namespace: {0}'.format( namespace ), warning = False )
+  scratch.UpdateMessage( 'Add namespace: {0}'.format( namespace ) )
 
 
 def SearchInCurrentBuffer( pattern ):
@@ -1020,9 +974,8 @@ def WriteToPreviewWindow( message ):
     JumpToPreviousWindow()
   else:
     # We couldn't get to the preview window, but we still want to give the user
-    # the information we have. The only remaining option is to echo to the
-    # status area.
-    PostVimMessage( message, warning = False )
+    # the information we have. We update the message in the scratch window.
+    scratch.UpdateMessage( message )
 
 
 def BufferIsVisibleForFilename( filename ):

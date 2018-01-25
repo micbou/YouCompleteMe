@@ -35,6 +35,7 @@ from ycm import base, paths, vimsupport
 from ycm.buffer import ( BufferDict,
                          DIAGNOSTIC_UI_FILETYPES,
                          DIAGNOSTIC_UI_ASYNC_FILETYPES )
+from ycm.scratch import scratch
 from ycmd import utils
 from ycmd import server_utils
 from ycmd.request_wrap import RequestWrap
@@ -173,7 +174,7 @@ class YouCompleteMe( object ):
         "Correct the error then restart the server "
         "with ':YcmRestartServer'.".format( str( error ).rstrip( '.' ) ) )
       self._logger.exception( error_message )
-      vimsupport.PostVimMessage( error_message )
+      scratch.DisplayMessage( error_message )
       return
 
     args = [ python_interpreter,
@@ -279,7 +280,7 @@ class YouCompleteMe( object ):
 
     error_message = SERVER_SHUTDOWN_MESSAGE + ' ' + error_message
     self._logger.error( error_message )
-    vimsupport.PostVimMessage( error_message )
+    scratch.DisplayMessage( error_message )
 
 
   def ServerPid( self ):
@@ -293,7 +294,7 @@ class YouCompleteMe( object ):
 
 
   def RestartServer( self ):
-    vimsupport.PostVimMessage( 'Restarting ycmd server...' )
+    scratch.UpdateMessage( 'Restarting ycmd server...' )
     self._ShutdownServer()
     self._SetUpServer()
 
@@ -497,6 +498,11 @@ class YouCompleteMe( object ):
 
   def OnCurrentIdentifierFinished( self ):
     SendEventNotificationAsync( 'CurrentIdentifierFinished' )
+
+
+  def OnWindowEnter( self ):
+    self.UpdateMatches()
+    scratch.OnWindowEnter()
 
 
   def OnCompleteDone( self ):
@@ -736,7 +742,7 @@ class YouCompleteMe( object ):
                       '  {0}\n'
                       '  {1}'.format( self._server_stdout,
                                       self._server_stderr ) )
-    return debug_info
+    scratch.DisplayMessage( debug_info )
 
 
   def GetLogfiles( self ):
@@ -785,7 +791,7 @@ class YouCompleteMe( object ):
           'Which logfile do you wish to open (or close if already open)?',
           sorted_logfiles )
       except RuntimeError as e:
-        vimsupport.PostVimMessage( str( e ) )
+        scratch.DisplayMessage( str( e ) )
         return
 
       logfile = logfiles[ sorted_logfiles[ logfile_index ] ]
@@ -824,22 +830,20 @@ class YouCompleteMe( object ):
           BuildRequestData(), 'detailed_diagnostic' )
 
       if 'message' in detailed_diagnostic:
-        vimsupport.PostVimMessage( detailed_diagnostic[ 'message' ],
-                                   warning = False )
+        scratch.DisplayMessage( detailed_diagnostic[ 'message' ] )
 
 
   def ForceCompileAndDiagnostics( self ):
     if not self.NativeFiletypeCompletionUsable():
-      vimsupport.PostVimMessage(
-          'Native filetype completion not supported for current file, '
-          'cannot force recompilation.', warning = False )
+      scratch.DisplayMessage(
+        'Native filetype completion not supported for current file, '
+        'cannot force recompilation.' )
       return False
-    vimsupport.PostVimMessage(
-        'Forcing compilation, this will block Vim until done.',
-        warning = False )
+    scratch.UpdateMessage(
+        'Forcing compilation, this will block Vim until done.' )
     self.OnFileReadyToParse()
     self.HandleFileParseRequest( block = True )
-    vimsupport.PostVimMessage( 'Diagnostics refreshed', warning = False )
+    scratch.UpdateMessage( 'Diagnostics refreshed' )
     return True
 
 
@@ -848,12 +852,15 @@ class YouCompleteMe( object ):
       return
 
     if not self._PopulateLocationListWithLatestDiagnostics():
-      vimsupport.PostVimMessage( 'No warnings or errors detected.',
-                                 warning = False )
+      scratch.UpdateMessage( 'No warnings or errors detected.' )
       return
 
     if self._user_options[ 'open_loclist_on_ycm_diags' ]:
       vimsupport.OpenLocationList( focus = True )
+
+
+  def ToggleScratch( self ):
+    scratch.Toggle()
 
 
   def _AddSyntaxDataIfNeeded( self, extra_data ):

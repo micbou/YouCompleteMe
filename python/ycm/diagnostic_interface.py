@@ -26,6 +26,7 @@ from future.utils import itervalues, iteritems
 from collections import defaultdict
 from ycm import vimsupport
 from ycm.diagnostic_filter import DiagnosticFilter, CompileLevel
+from ycm.scratch import scratch
 
 
 class DiagnosticInterface( object ):
@@ -100,7 +101,7 @@ class DiagnosticInterface( object ):
     if not diags:
       if self._diag_message_needs_clearing:
         # Clear any previous diag echo
-        vimsupport.PostVimMessage( '', warning = False )
+        scratch.UpdateMessage( '' )
         self._diag_message_needs_clearing = False
       return
 
@@ -109,7 +110,7 @@ class DiagnosticInterface( object ):
     if first_diag.get( 'fixit_available', False ):
       text += ' (FixIt)'
 
-    vimsupport.PostVimMessage( text, warning = False, truncate = True )
+    scratch.UpdateMessage( text )
     self._diag_message_needs_clearing = True
 
 

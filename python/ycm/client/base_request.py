@@ -29,6 +29,7 @@ import vim
 from future.utils import native
 from base64 import b64decode, b64encode
 from ycm import vimsupport
+from ycm.scratch import scratch
 from ycmd.utils import ToBytes, urljoin, urlparse, GetCurrentDirectory
 from ycmd.hmac_utils import CreateRequestHmac, CreateHmac, SecureBytesEqual
 from ycmd.responses import ServerError, UnknownExtraConf
@@ -254,7 +255,7 @@ def DisplayServerException( exception, truncate = False ):
   # up often and isn't something that's actionable by the user.
   if 'already being parsed' in serialized_exception:
     return
-  vimsupport.PostVimMessage( serialized_exception, truncate = truncate )
+  scratch.DisplayMessage( serialized_exception )
 
 
 def _ToUtf8Json( data ):

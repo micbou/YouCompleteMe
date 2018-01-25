@@ -136,7 +136,7 @@ function! youcompleteme#Enable()
     autocmd InsertLeave * call s:OnInsertLeave()
     autocmd VimLeave * call s:OnVimLeave()
     autocmd CompleteDone * call s:OnCompleteDone()
-    autocmd BufEnter,WinEnter * call s:UpdateMatches()
+    autocmd WinEnter * call s:OnWindowEnter()
   augroup END
 
   " The FileType event is not triggered for the first loaded file. We wait until
@@ -200,6 +200,7 @@ try:
 
   # Import the modules used in this file.
   from ycm import base, vimsupport
+  from ycm.scratch import scratch
 
   ycm_state = SetUpYCM()
 except Exception as error:
@@ -375,7 +376,7 @@ function! s:DisableOnLargeFile( buffer )
   let b:ycm_largefile =
         \ threshold > 0 && getfsize( expand( a:buffer ) ) > threshold
   if b:ycm_largefile
-    exec s:python_command "vimsupport.PostVimMessage(" .
+    exec s:python_command "scratch.UpdateMessage(" .
           \ "'YouCompleteMe is disabled in this buffer; " .
           \ "the file exceeded the max size (see YCM options).' )"
   endif
@@ -487,6 +488,8 @@ endfunction
 
 
 function! s:OnBufferEnter()
+  exec s:python_command "ycm_state.UpdateMatches()"
+
   if !s:VisitedBufferRequiresReparse()
     return
   endif
@@ -511,11 +514,6 @@ function! s:OnBufferUnload()
   endif
 
   exec s:python_command "ycm_state.OnBufferUnload( " . buffer_number . " )"
-endfunction
-
-
-function! s:UpdateMatches()
-  exec s:python_command "ycm_state.UpdateMatches()"
 endfunction
 
 
@@ -821,6 +819,11 @@ function! youcompleteme#ServerPid()
 endfunction
 
 
+function! s:OnWindowEnter()
+  exec s:python_command "ycm_state.OnWindowEnter()"
+endfunction
+
+
 function! s:SetUpCommands()
   command! YcmRestartServer call s:RestartServer()
   command! YcmDebugInfo call s:DebugInfo()
@@ -834,6 +837,7 @@ function! s:SetUpCommands()
   command! YcmDiags call s:ShowDiagnostics()
   command! YcmShowDetailedDiagnostic call s:ShowDetailedDiagnostic()
   command! YcmForceCompileAndDiagnostics call s:ForceCompileAndDiagnostics()
+  command! YcmToggleScratch call s:ToggleScratch()
 endfunction
 
 
@@ -851,11 +855,7 @@ endfunction
 
 
 function! s:DebugInfo()
-  echom "Printing YouCompleteMe debug information..."
-  let debug_info = s:Pyeval( 'ycm_state.DebugInfo()' )
-  for line in split( debug_info, "\n" )
-    echom '-- ' . line
-  endfor
+  exec s:python_command "ycm_state.DebugInfo()"
 endfunction
 
 
@@ -902,7 +902,7 @@ endfunction
 
 
 function! youcompleteme#OpenGoToList()
-  exec s:python_command "vimsupport.PostVimMessage(" .
+  exec s:python_command "scratch.DisplayMessage(" .
         \ "'WARNING: youcompleteme#OpenGoToList function is deprecated. " .
         \ "Do NOT use it.' )"
   exec s:python_command "vimsupport.OpenQuickFixList( True, True )"
@@ -921,6 +921,11 @@ endfunction
 
 function! s:ForceCompileAndDiagnostics()
   exec s:python_command "ycm_state.ForceCompileAndDiagnostics()"
+endfunction
+
+
+function! s:ToggleScratch()
+  exec s:python_command "ycm_state.ToggleScratch()"
 endfunction
 
 

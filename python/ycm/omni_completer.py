@@ -24,6 +24,7 @@ from builtins import *  # noqa
 
 import vim
 from ycm import vimsupport
+from ycm.scratch import scratch
 from ycmd import utils
 from ycmd.completers.completer import Completer
 from ycm.client.base_request import BaseRequest, HandleServerException
@@ -112,8 +113,7 @@ class OmniCompleter( Completer ):
       return list( filter( bool, items ) )
 
     except ( TypeError, ValueError, vim.error ) as error:
-      vimsupport.PostVimMessage(
-        OMNIFUNC_RETURNED_BAD_VALUE + ' ' + str( error ) )
+      scratch.DisplayMessage( OMNIFUNC_RETURNED_BAD_VALUE + ' ' + str( error ) )
       return []
 
 

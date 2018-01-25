@@ -25,6 +25,7 @@ from builtins import *  # noqa
 from ycm.client.base_request import ( BaseRequest, BuildRequestData,
                                       HandleServerException )
 from ycm import vimsupport
+from ycm.scratch import scratch
 from ycmd.utils import ToUnicode
 
 
@@ -100,8 +101,7 @@ class CommandRequest( BaseRequest ):
 
   def _HandleFixitResponse( self ):
     if not len( self._response[ 'fixits' ] ):
-      vimsupport.PostVimMessage( 'No fixits found for current line',
-                                 warning = False )
+      scratch.DisplayMessage( 'No fixits found for current line' )
     else:
       try:
         fixit_index = 0
@@ -118,19 +118,19 @@ class CommandRequest( BaseRequest ):
           self._response[ 'fixits' ][ fixit_index ][ 'chunks' ],
           silent = self._command == 'Format' )
       except RuntimeError as e:
-        vimsupport.PostVimMessage( str( e ) )
+        scratch.DisplayMessage( str( e ) )
 
 
   def _HandleBasicResponse( self ):
-    vimsupport.PostVimMessage( self._response, warning = False )
+    scratch.UpdateMessage( self._response )
 
 
   def _HandleMessageResponse( self ):
-    vimsupport.PostVimMessage( self._response[ 'message' ], warning = False )
+    scratch.UpdateMessage( self._response[ 'message' ] )
 
 
   def _HandleDetailedInfoResponse( self ):
-    vimsupport.WriteToPreviewWindow( self._response[ 'detailed_info' ] )
+    scratch.UpdateMessage( self._response[ 'detailed_info' ] )
 
 
 def SendCommandRequest( arguments, completer, extra_data = None ):
