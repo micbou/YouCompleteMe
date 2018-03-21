@@ -117,19 +117,22 @@ def BufferModified( buffer_object ):
   return buffer_object.options[ 'mod' ]
 
 
-def GetBufferData( buffer_object ):
-  return {
-    # Add a newline to match what gets saved to disk. See #1455 for details.
-    'contents': JoinLinesAsUnicode( buffer_object ) + '\n',
-    'filetypes': FiletypesForBuffer( buffer_object )
-  }
+def GetBufferContents( buffer_object ):
+  # Add a newline to match what gets saved to disk. See #1455 for details.
+  return JoinLinesAsUnicode( buffer_object ) + '\n'
 
 
 def GetUnsavedAndSpecifiedBufferData( included_buffer, included_filepath ):
   """Build part of the request containing the contents and filetypes of all
   dirty buffers as well as the buffer |included_buffer| with its filepath
   |included_filepath|."""
-  buffers_data = { included_filepath: GetBufferData( included_buffer ) }
+  buffers_data = {
+    included_filepath: {
+      'contents': GetBufferContents( included_buffer ),
+      'filetypes': FiletypesForBuffer( included_buffer ),
+      'modified': BufferModified( included_buffer )
+    }
+  }
 
   for buffer_object in vim.buffers:
     if not BufferModified( buffer_object ):
@@ -139,7 +142,11 @@ def GetUnsavedAndSpecifiedBufferData( included_buffer, included_filepath ):
     if filepath in buffers_data:
       continue
 
-    buffers_data[ filepath ] = GetBufferData( buffer_object )
+    buffers_data[ filepath ] = {
+      'contents': GetBufferContents( buffer_object ),
+      'filetypes': FiletypesForBuffer( buffer_object ),
+      'modified': True
+    }
 
   return buffers_data
 
