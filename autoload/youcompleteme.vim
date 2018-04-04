@@ -786,6 +786,10 @@ function! s:PollCompletion( ... )
         \   'candidates': response.completions
         \ }
   call s:Complete()
+
+  if !response.complete
+    call s:InvokeCompletion()
+  endif
 endfunction
 
 

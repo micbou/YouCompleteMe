@@ -35,7 +35,11 @@ class CompletionRequest( BaseRequest ):
     super( CompletionRequest, self ).__init__()
     self.request_data = request_data
     self._response_future = None
-    self._response = { 'completions': [], 'completion_start_column': -1 }
+    self._response = {
+      'completions': [],
+      'completion_start_column': -1,
+      'complete': True
+    }
     self._complete_done_hooks = {
       'cs': self._OnCompleteDone_Csharp,
       'java': self._OnCompleteDone_Java,
