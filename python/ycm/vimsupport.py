@@ -254,13 +254,13 @@ def GetDiagnosticMatchPattern( line_num,
   line_num, column_num = LineAndColumnNumbersClamped( line_num, column_num )
 
   if not line_end_num or not column_end_num:
-    return '\%{}l\%{}c'.format( line_num, column_num )
+    return r'\%{}l\%{}c'.format( line_num, column_num )
 
   # -1 and then +1 to account for column end not included in the range.
   line_end_num, column_end_num = LineAndColumnNumbersClamped(
       line_end_num, column_end_num - 1 )
   column_end_num += 1
-  return '\%{}l\%{}c\_.\\{{-}}\%{}l\%{}c'.format( line_num,
+  return r'\%{}l\%{}c\_.\{{-}}\%{}l\%{}c'.format( line_num,
                                                   column_num,
                                                   line_end_num,
                                                   column_end_num )
@@ -945,7 +945,7 @@ def InsertNamespace( namespace ):
       vim.eval( expr )
       return
 
-  pattern = '^\s*using\(\s\+[a-zA-Z0-9]\+\s\+=\)\?\s\+[a-zA-Z0-9.]\+\s*;\s*'
+  pattern = r'^\s*using\(\s\+[a-zA-Z0-9]\+\s\+=\)\?\s\+[a-zA-Z0-9.]\+\s*;\s*'
   existing_indent = ''
   line = SearchInCurrentBuffer( pattern )
   if line:
