@@ -830,7 +830,7 @@ function! youcompleteme#CompleteFunc( findstart, base )
   if a:findstart
     return s:completion.start_column - 1
   endif
-  return s:completion.candidates
+  return {'words': s:completion.candidates, 'filter': 'false'}
 endfunction
 
 
