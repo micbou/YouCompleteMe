@@ -1751,7 +1751,8 @@ also be specified through the 'mods=' argument as a comma-separated list e.g.:
   :YcmCompleter mods=rightbelow,vertical GoTo
 <
 This is useful for versions of Vim that don't support command modifiers (older
-than 7.4.1898).
+than 7.4.1898). Furthermore, the 'mods=' argument accepts two special modifiers
+'curwin' and 'existwin'. See the |GoTo| commands for more details.
 
 This command accepts a range that can either be specified through a selection
 in one of Vim's visual modes (see ':h visual-use') or on the command line. For
@@ -1794,6 +1795,50 @@ one destination, the quickfix list (see ':h quickfix') is populated with the
 available locations and opened to full width at the bottom of the screen. You
 can change this behavior by using the |YcmQuickFixOpened| autocommand.
 
+You can control where the destination is opened by setting the
+|g:ycm_goto_buffer_command| option to "''" (for backward compatibility reason)
+and by using one of the following command modifiers: 'aboveleft', 'belowright',
+'botright', 'leftabove', 'rightbelow', 'topleft', 'vertical', and 'tab'. See
+':h mods' for a description of these modifiers. They can also be specified
+through the 'mods=' argument as a comma-separated list e.g.
+'mods=aboveleft,vertical'. Furthermore, the 'mods=' argument accepts two
+special modifiers:
+
+- 'curwin': jump in the current window;
+- 'existwin': if the result is already open in a window of the current tab
+  page or any tab pages with the 'tab' modifier, jump to that window.
+
+The default behavior when |g:ycm_goto_buffer_command| is set to "''" is to jump
+into a new window split horizontally above the current one.
+
+Examples:
+
+- jump in the current window:
+>
+  :YcmCompleter mods=curwin GoTo
+<
+- jump into a new window split vertically to the left of the current one:
+>
+  :aboveleft vertical YcmCompleter GoTo
+<
+or (required for Vim older than 7.4.1898):
+>
+  :YcmCompleter mods=aboveleft,vertical GoTo
+<
+- jump into an existing window in the current tab; if no such window, jump in
+  the current window:
+>
+  :YcmCompleter mods=curwin,existwin GoTo
+<
+- jump into an existing window in any tab pages; if no such window, jump to a
+  new tabpage:
+>
+  :tab YcmCompleter mods=curwin,existwin GoTo
+<
+or (required for Vim older than 7.4.1898):
+>
+  :YcmCompleter mods=curwin,existwin,tab GoTo
+<
 -------------------------------------------------------------------------------
 The *GoToInclude* subcommand
 
@@ -3028,6 +3073,11 @@ Default: '1'
 <
 -------------------------------------------------------------------------------
 The *g:ycm_goto_buffer_command* option
+
+**NOTE:** this option is deprecated. You should set its value to "''" and use
+command modifiers as a prefix of the command or as a comma-separated list
+through the 'mods=' argument. See the |GoTo| commands for more details. This
+will become the default behavior once the option is removed.
 
 Defines where the |GoTo| commands result should be opened. Can take one of the
 following values: "'same-buffer'", "'split'", or "'split-or-existing-window'".

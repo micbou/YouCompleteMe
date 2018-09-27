@@ -33,10 +33,11 @@ from ycmd.utils import ( ByteOffsetToCodepointOffset, GetCurrentDirectory,
                          JoinLinesAsUnicode, ToBytes, ToUnicode )
 from ycmd import user_options_store
 
-BUFFER_COMMAND_MAP = { 'same-buffer'      : 'edit',
+BUFFER_COMMAND_MAP = { ''                 : 'split',
+                       # These commands are obsolete. The 'curwin', 'existwin',
+                       # 'vertical', and 'tab' modifiers should be used instead.
+                       'same-buffer'      : 'edit',
                        'split'            : 'split',
-                       # These commands are obsolete. :vertical or :tab should
-                       # be used with the 'split' command instead.
                        'horizontal-split' : 'split',
                        'vertical-split'   : 'vsplit',
                        'new-tab'          : 'tabedit' }
@@ -483,8 +484,20 @@ def GetVimCommand( user_command, default = 'edit' ):
 
 def JumpToFile( filename, command, modifiers ):
   vim_command = GetVimCommand( command )
+
+  # Vim does not support the 'curwin' and 'existwin' modifiers.
+  if 'curwin' in modifiers:
+    modifiers.remove( 'curwin' )
+  if 'existwin' in modifiers:
+    modifiers.remove( 'existwin' )
+
   try:
     escaped_filename = EscapeFilepathForVimCommand( filename )
+    # We prefix the command with 'keepjumps' so that opening the file is not
+    # recorded in the jumplist. So when we open the file and move the cursor to
+    # a location in it, the user can use CTRL-O to jump back to the original
+    # location, not to the start of the newly opened file. Sadly this fails on
+    # random occasions and the undesired jump remains in the jumplist.
     vim.command( 'keepjumps {} {} {}'.format( ' '.join( modifiers ),
                                               vim_command,
                                               escaped_filename ) )
@@ -503,35 +516,56 @@ def JumpToFile( filename, command, modifiers ):
   return True
 
 
+def TryJumpLocationInDifferentFile( filename,
+                                    line,
+                                    column,
+                                    user_command,
+                                    modifiers ):
+  # The 'split-or-existing-window' and 'new-or-existing-tab' commands are only
+  # kept for backward compatibility. The 'existwin' and 'tab' modifiers should
+  # be used instead.
+  if ( not user_command and 'existwin' in modifiers or
+       user_command == 'split-or-existing-window' ):
+    if 'tab' in modifiers:
+      if TryJumpLocationInTabs( filename, line, column ):
+        return True
+    elif TryJumpLocationInTab( vim.current.tabpage, filename, line, column ):
+      return True
+
+    if user_command == 'split-or-existing-window':
+      user_command = 'split'
+
+  if user_command == 'new-or-existing-tab':
+    if TryJumpLocationInTabs( filename, line, column ):
+      return True
+    user_command = 'new-tab'
+
+  if not user_command and 'curwin' in modifiers:
+    user_command = 'same-buffer'
+
+  if not JumpToFile( filename, user_command, modifiers ):
+    return True
+
+  return False
+
+
 # Both |line| and |column| need to be 1-based
 def JumpToLocation( filename, line, column, modifiers ):
   # Add an entry to the jumplist
   vim.command( "normal! m'" )
 
+  user_command = user_options_store.Value( 'goto_buffer_command' )
+
   if filename != GetCurrentBufferFilepath():
-    # We prefix the command with 'keepjumps' so that opening the file is not
-    # recorded in the jumplist. So when we open the file and move the cursor to
-    # a location in it, the user can use CTRL-O to jump back to the original
-    # location, not to the start of the newly opened file.
-    # Sadly this fails on random occasions and the undesired jump remains in the
-    # jumplist.
-    user_command = user_options_store.Value( 'goto_buffer_command' )
-
-    if user_command == 'split-or-existing-window':
-      if 'tab' in modifiers:
-        if TryJumpLocationInTabs( filename, line, column ):
-          return
-      elif TryJumpLocationInTab( vim.current.tabpage, filename, line, column ):
-        return
-      user_command = 'split'
-
-    # This command is kept for backward compatibility. :tab should be used with
-    # the 'split-or-existing-window' command instead.
-    if user_command == 'new-or-existing-tab':
-      if TryJumpLocationInTabs( filename, line, column ):
-        return
-      user_command = 'new-tab'
-
+    if TryJumpLocationInDifferentFile( filename,
+                                       line,
+                                       column,
+                                       user_command,
+                                       modifiers ):
+      return
+  elif ( not user_command and
+         'curwin' not in modifiers and
+         'existwin' not in modifiers ):
     if not JumpToFile( filename, user_command, modifiers ):
       return
 
