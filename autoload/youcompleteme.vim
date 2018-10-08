@@ -187,6 +187,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+import os
 import os.path as p
 import re
 import sys
@@ -219,7 +220,6 @@ def GetStandardLibraryIndexInSysPath():
 # Add dependencies to Python path.
 dependencies = [ p.join( root_folder, 'python' ),
                  p.join( third_party_folder, 'requests-futures' ),
-                 p.join( third_party_folder, 'ycmd' ),
                  p.join( third_party_folder, 'requests_deps', 'idna' ),
                  p.join( third_party_folder, 'requests_deps', 'chardet' ),
                  p.join( third_party_folder,
@@ -228,6 +228,13 @@ dependencies = [ p.join( root_folder, 'python' ),
                          'src' ),
                  p.join( third_party_folder, 'requests_deps', 'certifi' ),
                  p.join( third_party_folder, 'requests_deps', 'requests' ) ]
+
+ycmd_folder = p.join( third_party_folder, 'ycmd' )
+
+if os.path.exists( p.join( ycmd_folder, 'ycm_deps' ) ):
+  dependencies.append( p.join( ycmd_folder, 'ycm_deps' ) )
+else:
+  dependencies.append( p.join( ycmd_folder ) )
 
 # The concurrent.futures module is part of the standard library on Python 3.
 if sys.version_info[ 0 ] == 2:

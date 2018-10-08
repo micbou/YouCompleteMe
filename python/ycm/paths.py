@@ -27,7 +27,6 @@ import sys
 import vim
 import re
 
-# Can't import these from setup.py because it makes nosetests go crazy.
 DIR_OF_CURRENT_SCRIPT = os.path.dirname( os.path.abspath( __file__ ) )
 DIR_OF_YCMD = os.path.join( DIR_OF_CURRENT_SCRIPT, '..', '..', 'third_party',
                             'ycmd' )
@@ -100,3 +99,8 @@ def _EndsWithPython( path ):
 
 def PathToServerScript():
   return os.path.join( DIR_OF_YCMD, 'ycmd' )
+
+
+def PathToYcmdExecutable():
+  from ycmd import utils
+  return utils.FindExecutable( os.path.join( DIR_OF_YCMD, 'ycmd' ) )

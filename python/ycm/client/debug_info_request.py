@@ -56,13 +56,12 @@ def FormatDebugInfoResponse( response ):
 
 
 def _FormatYcmdDebugInfo( ycmd ):
-  python = ycmd[ 'python' ]
   clang = ycmd[ 'clang' ]
-  message = ( 'Server Python interpreter: {0}\n'
-              'Server Python version: {1}\n'
+  message = ( 'Server executable: {0}\n'
+              'Server version: {1}\n'
               'Server has Clang support compiled in: {2}\n'
-              'Clang version: {3}\n'.format( python[ 'executable' ],
-                                             python[ 'version' ],
+              'Clang version: {3}\n'.format( ycmd[ 'executable' ],
+                                             ycmd[ 'version' ],
                                              clang[ 'has_support' ],
                                              clang[ 'version' ] ) )
   extra_conf = ycmd[ 'extra_conf' ]

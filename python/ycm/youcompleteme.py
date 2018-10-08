@@ -126,6 +126,25 @@ class YouCompleteMe( object ):
     self._ycmd_keepalive.Start()
 
 
+  def _GetYcmdCommand( self ):
+    ycmd_executable = paths.PathToYcmdExecutable()
+    if ycmd_executable:
+      return [ ycmd_executable ]
+
+    try:
+      python_interpreter = paths.PathToPythonInterpreter()
+    except RuntimeError as error:
+      error_message = (
+        "Unable to start the ycmd server. {0}. "
+        "Correct the error then restart the server "
+        "with ':YcmRestartServer'.".format( str( error ).rstrip( '.' ) ) )
+      self._logger.exception( error_message )
+      vimsupport.PostVimMessage( error_message )
+      return None
+
+    return [ python_interpreter, paths.PathToServerScript() ]
+
+
   def _SetUpServer( self ):
     self._available_completers = {}
     self._user_notified_about_crash = False
@@ -155,36 +174,28 @@ class YouCompleteMe( object ):
     BaseRequest.server_location = 'http://127.0.0.1:' + str( server_port )
     BaseRequest.hmac_secret = hmac_secret
 
-    try:
-      python_interpreter = paths.PathToPythonInterpreter()
-    except RuntimeError as error:
-      error_message = (
-        "Unable to start the ycmd server. {0}. "
-        "Correct the error then restart the server "
-        "with ':YcmRestartServer'.".format( str( error ).rstrip( '.' ) ) )
-      self._logger.exception( error_message )
-      vimsupport.PostVimMessage( error_message )
+    command = self._GetYcmdCommand()
+    if not command:
       return
 
-    args = [ python_interpreter,
-             paths.PathToServerScript(),
-             '--port={0}'.format( server_port ),
-             '--options_file={0}'.format( options_file.name ),
-             '--log={0}'.format( self._user_options[ 'log_level' ] ),
-             '--idle_suicide_seconds={0}'.format(
-                SERVER_IDLE_SUICIDE_SECONDS ) ]
+    command.extend( [
+      '--port={0}'.format( server_port ),
+      '--options_file={0}'.format( options_file.name ),
+      '--log={0}'.format( self._user_options[ 'log_level' ] ),
+      '--idle_suicide_seconds={0}'.format( SERVER_IDLE_SUICIDE_SECONDS )
+    ] )
 
     self._server_stdout = utils.CreateLogfile(
         SERVER_LOGFILE_FORMAT.format( port = server_port, std = 'stdout' ) )
     self._server_stderr = utils.CreateLogfile(
         SERVER_LOGFILE_FORMAT.format( port = server_port, std = 'stderr' ) )
-    args.append( '--stdout={0}'.format( self._server_stdout ) )
-    args.append( '--stderr={0}'.format( self._server_stderr ) )
+    command.append( '--stdout={0}'.format( self._server_stdout ) )
+    command.append( '--stderr={0}'.format( self._server_stderr ) )
 
     if self._user_options[ 'keep_logfiles' ]:
-      args.append( '--keep_logfiles' )
+      command.append( '--keep_logfiles' )
 
-    self._server_popen = utils.SafePopen( args, stdin_windows = PIPE,
+    self._server_popen = utils.SafePopen( command, stdin_windows = PIPE,
                                           stdout = PIPE, stderr = PIPE )
 
 
