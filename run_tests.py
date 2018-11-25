@@ -10,27 +10,39 @@ import sys
 DIR_OF_THIS_SCRIPT = p.dirname( p.abspath( __file__ ) )
 DIR_OF_THIRD_PARTY = p.join( DIR_OF_THIS_SCRIPT, 'third_party' )
 
-# We don't include python-future (not to be confused with pythonfutures) because
-# it needs to be inserted in sys.path AFTER the standard library imports but we
-# can't do that with PYTHONPATH because the std lib paths are always appended to
-# PYTHONPATH. We do it correctly inside Vim because we have access to the right
-# sys.path. So for dev, we rely on python-future being installed correctly with
-#
-#   pip install -r python/test_requirements.txt
-#
-# Pip knows how to install this correctly so that it doesn't matter where in
-# sys.path the path is.
-python_path = [ p.join( DIR_OF_THIRD_PARTY, 'pythonfutures' ),
-                p.join( DIR_OF_THIRD_PARTY, 'requests-futures' ),
-                p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'chardet' ),
-                p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'certifi' ),
-                p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'idna' ),
-                p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'requests' ),
-                p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'urllib3', 'src' ),
-                p.join( DIR_OF_THIRD_PARTY, 'ycmd' ) ]
-if os.environ.get( 'PYTHONPATH' ):
-  python_path.append( os.environ[ 'PYTHONPATH' ] )
-os.environ[ 'PYTHONPATH' ] = os.pathsep.join( python_path )
+
+def AddDependenciesToPythonPath():
+  # We don't include python-future (not to be confused with pythonfutures)
+  # because it needs to be inserted in sys.path AFTER the standard library
+  # imports but we can't do that with PYTHONPATH because the std lib paths are
+  # always appended to PYTHONPATH. We do it correctly inside Vim because we have
+  # access to the right sys.path. So for dev, we rely on python-future being
+  # installed correctly with
+  #
+  #   pip install -r python/test_requirements.txt
+  #
+  # Pip knows how to install this correctly so that it doesn't matter where in
+  # sys.path the path is.
+  python_path = [ p.join( DIR_OF_THIRD_PARTY, 'pythonfutures' ),
+                  p.join( DIR_OF_THIRD_PARTY, 'requests-futures' ),
+                  p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'chardet' ),
+                  p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'certifi' ),
+                  p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'idna' ),
+                  p.join( DIR_OF_THIRD_PARTY, 'requests_deps',
+                                              'urllib3',
+                                              'src' ),
+                  p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'requests' ) ]
+
+  ycmd_folder = p.join( DIR_OF_THIRD_PARTY, 'ycmd' )
+
+  if os.path.exists( p.join( ycmd_folder, 'ycm_deps' ) ):
+    python_path.append( p.join( ycmd_folder, 'ycm_deps' ) )
+  else:
+    python_path.append( p.join( ycmd_folder ) )
+
+  if os.environ.get( 'PYTHONPATH' ):
+    python_path.append( os.environ[ 'PYTHONPATH' ] )
+  os.environ[ 'PYTHONPATH' ] = os.pathsep.join( python_path )
 
 
 def RunFlake8():
@@ -46,7 +58,7 @@ def RunFlake8():
 
 def ParseArguments():
   parser = argparse.ArgumentParser()
-  parser.add_argument( '--skip-build', action = 'store_true',
+  parser.add_argument( '--skip-install', action = 'store_true',
                        help = 'Do not build ycmd before testing' )
   parser.add_argument( '--coverage', action = 'store_true',
                        help = 'Enable coverage report' )
@@ -61,15 +73,18 @@ def ParseArguments():
   return parsed_args, nosetests_args
 
 
-def BuildYcmdLibs( args ):
-  if not args.skip_build:
+def InstallYcmd( args ):
+  if not args.skip_install:
     subprocess.check_call( [
       sys.executable,
-      p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'ycmd', 'build.py' )
+      p.join( DIR_OF_THIS_SCRIPT, 'install.py' ),
+      '--dev'
     ] )
 
 
 def NoseTests( parsed_args, extra_nosetests_args ):
+  AddDependenciesToPythonPath()
+
   # Always passing --with-id to nosetests enables non-surprising usage of
   # its --failed flag.
   nosetests_args = [ '-v', '--with-id' ]
@@ -89,10 +104,10 @@ def NoseTests( parsed_args, extra_nosetests_args ):
 
 
 def Main():
-  ( parsed_args, nosetests_args ) = ParseArguments()
+  parsed_args, nosetests_args = ParseArguments()
   if not parsed_args.no_flake8:
     RunFlake8()
-  BuildYcmdLibs( parsed_args )
+  InstallYcmd( parsed_args )
   NoseTests( parsed_args, nosetests_args )
 
 
