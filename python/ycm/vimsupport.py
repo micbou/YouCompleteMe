@@ -28,8 +28,8 @@ import os
 import json
 import re
 from collections import defaultdict, namedtuple
-from ycmd.utils import ( ByteOffsetToCodepointOffset, GetCurrentDirectory,
-                         JoinLinesAsUnicode, ToBytes, ToUnicode )
+from ycmd.utils import ( GetCurrentDirectory, JoinLinesAsUnicode, ToBytes,
+                         ToUnicode )
 
 BUFFER_COMMAND_MAP = { 'same-buffer'      : 'edit',
                        'split'            : 'split',
@@ -74,6 +74,8 @@ NO_COMPLETIONS = {
   'completions': []
 }
 
+YCM_VAR_PREFIX = 'ycm_'
+
 
 def CurrentLineAndColumn():
   """Returns the 0-based current line and 0-based current column."""
@@ -105,17 +107,6 @@ def CurrentColumn():
 
 def CurrentLineContents():
   return ToUnicode( vim.current.line )
-
-
-def CurrentLineContentsAndCodepointColumn():
-  """Returns the line contents as a unicode string and the 0-based current
-  column as a codepoint offset. If the current column is outside the line,
-  returns the column position at the end of the line."""
-  line = CurrentLineContents()
-  byte_column = CurrentColumn()
-  # ByteOffsetToCodepointOffset expects 1-based offset.
-  column = ByteOffsetToCodepointOffset( line, byte_column + 1 ) - 1
-  return line, column
 
 
 def TextAfterCursor():
@@ -1238,3 +1229,97 @@ def VimVersionAtLeast( version_string ):
     return actual_major_and_minor > matching_major_and_minor
 
   return GetBoolValue( "has( 'patch{0}' )".format( patch ) )
+
+
+def GetUserOptions():
+  """Builds a dictionary mapping YCM Vim user options to values. Option names
+  don't have the 'ycm_' prefix."""
+  # We only evaluate the keys of the vim globals and not the whole dictionary
+  # to avoid unicode issues.
+  # See https://github.com/Valloric/YouCompleteMe/pull/2151 for details.
+  keys = GetVimGlobalsKeys()
+  user_options = {}
+  for key in keys:
+    if not key.startswith( YCM_VAR_PREFIX ):
+      continue
+    new_key = key[ len( YCM_VAR_PREFIX ): ]
+    new_value = VimExpressionToPythonType( 'g:' + key )
+    user_options[ new_key ] = new_value
+
+  return user_options
+
+
+def AdjustCandidateInsertionText( candidates ):
+  """This function adjusts the candidate insertion text to take into account the
+  text that's currently in front of the cursor.
+
+  For instance ('|' represents the cursor):
+    1. Buffer state: 'foo.|bar'
+    2. A completion candidate of 'zoobar' is shown and the user selects it.
+    3. Buffer state: 'foo.zoobar|bar' instead of 'foo.zoo|bar' which is what the
+    user wanted.
+
+  This function changes candidates to resolve that issue.
+
+  It could be argued that the user actually wants the final buffer state to be
+  'foo.zoobar|' (the cursor at the end), but that would be much more difficult
+  to implement and is probably not worth doing.
+  """
+
+  def NewCandidateInsertionText( to_insert, text_after_cursor ):
+    overlap_len = OverlapLength( to_insert, text_after_cursor )
+    if overlap_len:
+      return to_insert[ :-overlap_len ]
+    return to_insert
+
+  text_after_cursor = TextAfterCursor()
+  if not text_after_cursor:
+    return candidates
+
+  new_candidates = []
+  for candidate in candidates:
+    new_candidate = candidate.copy()
+
+    if not new_candidate.get( 'abbr' ):
+      new_candidate[ 'abbr' ] = new_candidate[ 'word' ]
+
+    new_candidate[ 'word' ] = NewCandidateInsertionText(
+      new_candidate[ 'word' ],
+      text_after_cursor )
+
+    new_candidates.append( new_candidate )
+  return new_candidates
+
+
+def OverlapLength( left_string, right_string ):
+  """Returns the length of the overlap between two strings.
+  Example: "foo baro" and "baro zoo" -> 4
+  """
+  left_string_length = len( left_string )
+  right_string_length = len( right_string )
+
+  if not left_string_length or not right_string_length:
+    return 0
+
+  # Truncate the longer string.
+  if left_string_length > right_string_length:
+    left_string = left_string[ -right_string_length: ]
+  elif left_string_length < right_string_length:
+    right_string = right_string[ :left_string_length ]
+
+  if left_string == right_string:
+    return min( left_string_length, right_string_length )
+
+  # Start by looking for a single character match
+  # and increase length until no match is found.
+  best = 0
+  length = 1
+  while True:
+    pattern = left_string[ -length: ]
+    found = right_string.find( pattern )
+    if found < 0:
+      return best
+    length += found
+    if left_string[ -length: ] == right_string[ :length ]:
+      best = length
+      length += 1
