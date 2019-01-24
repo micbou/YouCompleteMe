@@ -28,7 +28,11 @@ import vim
 from future.utils import native
 from base64 import b64decode, b64encode
 from ycm import vimsupport
-from ycmd.utils import ToBytes, urljoin, urlparse, GetCurrentDirectory
+from ycmd.utils import ( GetCurrentDirectory,
+                         ToBytes,
+                         ToUnicode,
+                         urljoin,
+                         urlparse )
 from ycmd.hmac_utils import CreateRequestHmac, CreateHmac, SecureBytesEqual
 from ycmd.responses import ServerError, UnknownExtraConf
 
@@ -232,6 +236,25 @@ def BuildRequestData( buffer_number = None ):
     'working_dir': working_dir,
     'file_data': vimsupport.GetUnsavedAndSpecifiedBufferData( current_buffer,
                                                               current_filepath )
+  }
+
+
+def BuildLineRequestData():
+  """Same as BuildRequestData but only for the current line. Used as the
+  body of the /start_column request to reduce bandwidth."""
+  current_buffer = vim.current.buffer
+  current_filepath = vimsupport.GetBufferFilepath( current_buffer )
+  line, column = vimsupport.CurrentLineAndColumn()
+  return {
+    'filepath': current_filepath,
+    'line_num': 1,
+    'column_num': column + 1,
+    'file_data': {
+      current_filepath: {
+        'contents': ToUnicode( current_buffer[ line ] ),
+        'filetypes': vimsupport.FiletypesForBuffer( current_buffer )
+      }
+    }
   }
 
 

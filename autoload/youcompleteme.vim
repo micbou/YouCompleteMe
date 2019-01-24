@@ -242,7 +242,7 @@ try:
                    p.join( third_party_folder, 'python-future', 'src' ) )
 
   # Import the modules used in this file.
-  from ycm import base, vimsupport, youcompleteme
+  from ycm import vimsupport, youcompleteme
 
   ycm_state = youcompleteme.YouCompleteMe()
 except Exception as error:
@@ -707,13 +707,12 @@ function! s:OnTextChangedInsertMode()
     return
   endif
 
-  call s:IdentifierFinishedOperations()
-
-  " We have to make sure we correctly leave semantic mode even when the user
-  " inserts something like a "operator[]" candidate string which fails
-  " CurrentIdentifierFinished check.
-  if s:force_semantic && !s:Pyeval( 'base.LastEnteredCharIsIdentifierChar()' )
+  let expected_start_column = s:Pyeval( 'ycm_state.GetStartColumn()' )
+  if s:completion.completion_start_column != expected_start_column
+    exec s:python_command "ycm_state.OnCurrentIdentifierFinished()"
     let s:force_semantic = 0
+    let s:completion = s:default_completion
+    let s:completion.completion_start_column = expected_start_column
   endif
 
   if &completefunc == "youcompleteme#CompleteFunc" &&
@@ -764,16 +763,6 @@ function! s:ClosePreviewWindowIfNeeded()
   " This command does the actual closing of the preview window. If no preview
   " window is shown, nothing happens.
   pclose
-endfunction
-
-
-function! s:IdentifierFinishedOperations()
-  if !s:Pyeval( 'base.CurrentIdentifierFinished()' )
-    return
-  endif
-  exec s:python_command "ycm_state.OnCurrentIdentifierFinished()"
-  let s:force_semantic = 0
-  let s:completion = s:default_completion
 endfunction
 
 
