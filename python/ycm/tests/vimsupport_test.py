@@ -24,20 +24,21 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
+import contextlib
+import json
+import os
+from hamcrest import ( assert_that, calling, contains, empty, equal_to,
+                       has_entry, raises )
+from mock import MagicMock, call, patch
+from nose.tools import eq_
+
+from ycm import vimsupport
 from ycm.tests import PathToTestFile
 from ycm.tests.test_utils import ( CurrentWorkingDirectory, ExtendedMock,
                                    MockVimBuffers, MockVimModule, Version,
                                    VimBuffer, VimError )
 MockVimModule()
-
-from ycm import vimsupport
-from nose.tools import eq_
-from hamcrest import ( assert_that, calling, contains, empty, equal_to,
-                       has_entry, raises )
-from mock import MagicMock, call, patch
 from ycmd.utils import ToBytes
-import os
-import json
 
 
 @patch( 'vim.eval', new_callable = ExtendedMock )
@@ -1957,3 +1958,131 @@ def VimVersionAtLeast_test():
   assert_that( not vimsupport.VimVersionAtLeast( '7.4.1579' ) )
   assert_that( not vimsupport.VimVersionAtLeast( '7.4.1898' ) )
   assert_that( not vimsupport.VimVersionAtLeast( '8.1.278' ) )
+
+
+@contextlib.contextmanager
+def MockTextAfterCursor( text ):
+  with patch( 'ycm.vimsupport.TextAfterCursor', return_value = text ):
+    yield
+
+
+def AdjustCandidateInsertionText_Basic_test():
+  with MockTextAfterCursor( 'bar' ):
+    eq_( [ { 'word': 'foo',    'abbr': 'foobar' } ],
+         vimsupport.AdjustCandidateInsertionText( [
+           { 'word': 'foobar', 'abbr': '' } ] ) )
+
+
+def AdjustCandidateInsertionText_ParenInTextAfterCursor_test():
+  with MockTextAfterCursor( 'bar(zoo' ):
+    eq_( [ { 'word': 'foo',    'abbr': 'foobar' } ],
+         vimsupport.AdjustCandidateInsertionText( [
+           { 'word': 'foobar', 'abbr': '' } ] ) )
+
+
+def AdjustCandidateInsertionText_PlusInTextAfterCursor_test():
+  with MockTextAfterCursor( 'bar+zoo' ):
+    eq_( [ { 'word': 'foo',    'abbr': 'foobar' } ],
+         vimsupport.AdjustCandidateInsertionText( [
+           { 'word': 'foobar', 'abbr': '' } ] ) )
+
+
+def AdjustCandidateInsertionText_WhitespaceInTextAfterCursor_test():
+  with MockTextAfterCursor( 'bar zoo' ):
+    eq_( [ { 'word': 'foo',    'abbr': 'foobar' } ],
+         vimsupport.AdjustCandidateInsertionText( [
+           { 'word': 'foobar', 'abbr': '' } ] ) )
+
+
+def AdjustCandidateInsertionText_MoreThanWordMatchingAfterCursor_test():
+  with MockTextAfterCursor( 'bar.h' ):
+    eq_( [ { 'word': 'foo',      'abbr': 'foobar.h' } ],
+         vimsupport.AdjustCandidateInsertionText( [
+           { 'word': 'foobar.h', 'abbr': '' } ] ) )
+
+  with MockTextAfterCursor( 'bar(zoo' ):
+    eq_( [ { 'word': 'foo',        'abbr': 'foobar(zoo' } ],
+         vimsupport.AdjustCandidateInsertionText( [
+           { 'word': 'foobar(zoo', 'abbr': '' } ] ) )
+
+
+def AdjustCandidateInsertionText_NotSuffix_test():
+  with MockTextAfterCursor( 'bar' ):
+    eq_( [ { 'word': 'foofoo', 'abbr': 'foofoo' } ],
+         vimsupport.AdjustCandidateInsertionText( [
+           { 'word': 'foofoo', 'abbr': '' } ] ) )
+
+
+def AdjustCandidateInsertionText_NothingAfterCursor_test():
+  with MockTextAfterCursor( '' ):
+    eq_( [ { 'word': 'foofoo', 'abbr': '' },
+           { 'word': 'zobar',  'abbr': '' } ],
+         vimsupport.AdjustCandidateInsertionText( [
+           { 'word': 'foofoo', 'abbr': '' },
+           { 'word': 'zobar',  'abbr': '' } ] ) )
+
+
+def AdjustCandidateInsertionText_MultipleStrings_test():
+  with MockTextAfterCursor( 'bar' ):
+    eq_( [ { 'word': 'foo',    'abbr': 'foobar' },
+           { 'word': 'zo',     'abbr': 'zobar' },
+           { 'word': 'q',      'abbr': 'qbar' },
+           { 'word': '',       'abbr': 'bar' }, ],
+         vimsupport.AdjustCandidateInsertionText( [
+           { 'word': 'foobar', 'abbr': '' },
+           { 'word': 'zobar',  'abbr': '' },
+           { 'word': 'qbar',   'abbr': '' },
+           { 'word': 'bar',    'abbr': '' } ] ) )
+
+
+def AdjustCandidateInsertionText_DontTouchAbbr_test():
+  with MockTextAfterCursor( 'bar' ):
+    eq_( [ { 'word': 'foo',    'abbr': '1234' } ],
+         vimsupport.AdjustCandidateInsertionText( [
+           { 'word': 'foobar', 'abbr': '1234' } ] ) )
+
+
+def AdjustCandidateInsertionText_NoAbbr_test():
+  with MockTextAfterCursor( 'bar' ):
+    eq_( [ { 'word': 'foo', 'abbr': 'foobar' } ],
+         vimsupport.AdjustCandidateInsertionText( [
+           { 'word': 'foobar' } ] ) )
+
+
+def OverlapLength_Basic_test():
+  eq_( 3, vimsupport.OverlapLength( 'foo bar', 'bar zoo' ) )
+  eq_( 3, vimsupport.OverlapLength( 'foobar', 'barzoo' ) )
+
+
+def OverlapLength_BasicWithUnicode_test():
+  eq_( 3, vimsupport.OverlapLength( u'bar fäö', u'fäö bar' ) )
+  eq_( 3, vimsupport.OverlapLength( u'zoofäö', u'fäözoo' ) )
+
+
+def OverlapLength_OneCharOverlap_test():
+  eq_( 1, vimsupport.OverlapLength( 'foo b', 'b zoo' ) )
+
+
+def OverlapLength_SameStrings_test():
+  eq_( 6, vimsupport.OverlapLength( 'foobar', 'foobar' ) )
+
+
+def OverlapLength_Substring_test():
+  eq_( 6, vimsupport.OverlapLength( 'foobar', 'foobarzoo' ) )
+  eq_( 6, vimsupport.OverlapLength( 'zoofoobar', 'foobar' ) )
+
+
+def OverlapLength_LongestOverlap_test():
+  eq_( 7, vimsupport.OverlapLength( 'bar foo foo', 'foo foo bar' ) )
+
+
+def OverlapLength_EmptyInput_test():
+  eq_( 0, vimsupport.OverlapLength( '', 'goobar' ) )
+  eq_( 0, vimsupport.OverlapLength( 'foobar', '' ) )
+  eq_( 0, vimsupport.OverlapLength( '', '' ) )
+
+
+def OverlapLength_NoOverlap_test():
+  eq_( 0, vimsupport.OverlapLength( 'foobar', 'goobar' ) )
+  eq_( 0, vimsupport.OverlapLength( 'foobar', '(^($@#$#@' ) )
+  eq_( 0, vimsupport.OverlapLength( 'foo bar zoo', 'foo zoo bar' ) )
