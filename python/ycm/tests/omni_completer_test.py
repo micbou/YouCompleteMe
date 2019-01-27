@@ -732,8 +732,8 @@ def StartColumnCompliance( ycm,
 
 def OmniCompleter_GetCompletions_StartColumnCompliance_test():
   yield StartColumnCompliance, -4, [ { 'word': 'foo' } ], 3
-  yield StartColumnCompliance, -3, [],        1
-  yield StartColumnCompliance, -2, [],        1
+  yield StartColumnCompliance, -3, [],                   -2
+  yield StartColumnCompliance, -2, [],                   -1
   yield StartColumnCompliance, -1, [ { 'word': 'foo' } ], 3
   yield StartColumnCompliance,  0, [ { 'word': 'foo' } ], 1
   yield StartColumnCompliance,  1, [ { 'word': 'foo' } ], 2

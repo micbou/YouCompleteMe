@@ -24,8 +24,6 @@ from builtins import *  # noqa
 
 import vim
 from ycm import vimsupport
-from ycmd import utils
-from ycmd.completers.completer import Completer
 from ycm.client.base_request import BaseRequest
 
 OMNIFUNC_RETURNED_BAD_VALUE = 'Omnifunc returned bad value to YCM!'
@@ -33,50 +31,39 @@ OMNIFUNC_NOT_LIST = ( 'Omnifunc did not return a list or a dict with a "words" '
                      ' list when expected.' )
 
 
-class OmniCompleter( Completer ):
+class OmniCompleter():
   def __init__( self, user_options ):
-    super( OmniCompleter, self ).__init__( user_options )
+    self._should_use_cache = bool( user_options[ 'cache_omnifunc' ] )
+    self._disabled_filetypes = user_options[
+      'filetype_specific_completion_to_disable' ]
     self._omnifunc = None
-
-
-  def SupportedFiletypes( self ):
-    return []
-
-
-  def ShouldUseCache( self ):
-    return bool( self.user_options[ 'cache_omnifunc' ] )
+    self._cached_start_column = None
+    self._cached_query = ''
+    self._cached_candidates = []
 
 
   def ShouldUseNow( self, request_data ):
-    self._omnifunc = utils.ToUnicode( vim.eval( '&omnifunc' ) )
+    self._omnifunc = vimsupport.ToUnicode( vim.eval( '&omnifunc' ) )
     if not self._omnifunc:
       return False
-    if self.ShouldUseCache():
-      return super( OmniCompleter, self ).ShouldUseNow( request_data )
-    return self.ShouldUseNowInner( request_data )
-
-
-  def ShouldUseNowInner( self, request_data ):
     if request_data[ 'force_semantic' ]:
       return True
-    disabled_filetypes = self.user_options[
-      'filetype_specific_completion_to_disable' ]
-    if not vimsupport.CurrentFiletypesEnabled( disabled_filetypes ):
+    if not vimsupport.CurrentFiletypesEnabled( self._disabled_filetypes ):
       return False
-    return super( OmniCompleter, self ).ShouldUseNowInner( request_data )
+    return BaseRequest().PostDataToHandler( request_data, 'should_use_now' )
 
 
-  def ComputeCandidates( self, request_data ):
-    if self.ShouldUseCache():
-      return super( OmniCompleter, self ).ComputeCandidates( request_data )
-    if self.ShouldUseNowInner( request_data ):
-      return self.ComputeCandidatesInner( request_data )
-    return []
+  def _ComputeQuery( self, start_column, column ):
+    current_line_bytes = vimsupport.ToBytes( vim.current.line )
+    return vimsupport.ToUnicode( current_line_bytes[ start_column : column ] )
 
 
-  def ComputeCandidatesInner( self, request_data ):
-    if not self._omnifunc:
-      return []
+  def _GetCandidates( self ):
+    if self._should_use_cache and self._cached_start_column is not None:
+      column = vimsupport.CurrentColumn()
+      return ( self._cached_start_column,
+               self._ComputeQuery( self._cached_start_column, column ),
+               self._cached_candidates )
 
     # Calling directly the omnifunc may move the cursor position. This is the
     # case with the default Vim omnifunc for C-family languages
@@ -94,16 +81,9 @@ class OmniCompleter( Completer ):
       # column, the start column is set to the current column; otherwise, the
       # value is used as the start column.
       if start_column in ( -3, -2 ):
-        return []
+        return start_column, '', []
       if start_column < 0 or start_column > column:
         start_column = column
-
-      # Use the start column calculated by the omnifunc, rather than our own
-      # interpretation. This is important for certain languages where our
-      # identifier detection is either incorrect or not compatible with the
-      # behaviour of the omnifunc. Note: do this before calling the omnifunc
-      # because it affects the value returned by 'query'.
-      request_data[ 'start_column' ] = start_column + 1
 
       # Vim internally moves the cursor to the start column before calling again
       # the omnifunc. Some omnifuncs like the one defined by the
@@ -111,43 +91,57 @@ class OmniCompleter( Completer ):
       # of candidates.
       vimsupport.SetCurrentLineAndColumn( line, start_column )
 
+      query = self._ComputeQuery( start_column, column )
+
       omnifunc_call = [ self._omnifunc,
                         "(0,'",
-                        vimsupport.EscapeForVim( request_data[ 'query' ] ),
+                        vimsupport.EscapeForVim( query ),
                         "')" ]
-      items = vim.eval( ''.join( omnifunc_call ) )
+      candidates = vim.eval( ''.join( omnifunc_call ) )
 
-      if isinstance( items, dict ) and 'words' in items:
-        items = items[ 'words' ]
+      if isinstance( candidates, dict ) and 'words' in candidates:
+        candidates = candidates[ 'words' ]
 
-      if not hasattr( items, '__iter__' ):
+      if not hasattr( candidates, '__iter__' ):
         raise TypeError( OMNIFUNC_NOT_LIST )
 
       # Vim allows each item of the list to be either a string or a dictionary
       # but ycmd only supports lists where items are all strings or all
       # dictionaries. Convert all strings into dictionaries.
-      for index, item in enumerate( items ):
-        if not isinstance( item, dict ):
-          items[ index ] = { 'word': item }
+      for index, candidate in enumerate( candidates ):
+        if not isinstance( candidate, dict ):
+          candidates[ index ] = { 'word': candidate }
 
-      return items
-
+      self._cached_start_column = start_column
+      self._cached_candidates = candidates
+      return start_column, query, candidates
     except ( TypeError, ValueError, vim.error ) as error:
       vimsupport.PostVimMessage(
         OMNIFUNC_RETURNED_BAD_VALUE + ' ' + str( error ) )
-      return []
+      return column, '', []
 
     finally:
       vimsupport.SetCurrentLineAndColumn( line, column )
 
 
-  def FilterAndSortCandidatesInner( self, candidates, sort_property, query ):
+  def ComputeCandidates( self, request_data ):
+    start_column, query, candidates = self._GetCandidates()
+    if self._should_use_cache and candidates:
+      candidates = self.FilterAndSortCandidates( candidates, query )
+    return start_column, candidates
+
+
+  def FilterAndSortCandidates( self, candidates, query ):
     request_data = {
       'candidates': candidates,
-      'sort_property': sort_property,
+      'sort_property': 'word',
       'query': query
     }
 
     response = BaseRequest().PostDataToHandler( request_data,
                                                 'filter_and_sort_candidates' )
     return response if response is not None else []
+
+
+  def InvalidateCache( self ):
+    self._cached_start_column = None

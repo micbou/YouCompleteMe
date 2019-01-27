@@ -28,14 +28,14 @@ from nose.tools import eq_
 from ycm.client.omni_completion_request import OmniCompletionRequest
 
 
-def BuildOmnicompletionRequest( results, start_column = 1 ):
+def BuildOmnicompletionRequest( completions, start_column = 0 ):
   omni_completer = MagicMock()
-  omni_completer.ComputeCandidates = MagicMock( return_value = results )
+  omni_completer.ComputeCandidates = MagicMock(
+    return_value = ( start_column, completions ) )
 
   request_data = {
     'line_num': 1,
-    'column_num': 1,
-    'start_column': start_column
+    'column_num': 1
   }
   request = OmniCompletionRequest( omni_completer, request_data )
   request.Start()
@@ -50,12 +50,12 @@ def Done_AlwaysTrue_test():
 
 
 def Response_FromOmniCompleter_test():
-  results = [ { "word": "test" } ]
-  request = BuildOmnicompletionRequest( results )
+  completions = [ { "word": "test" } ]
+  request = BuildOmnicompletionRequest( completions )
 
   eq_( request.Response(), {
     'line': 1,
     'column': 1,
     'completion_start_column': 1,
-    'completions': results
+    'completions': completions
   } )

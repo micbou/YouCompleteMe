@@ -32,7 +32,8 @@ class OmniCompletionRequest( CompletionRequest ):
 
 
   def Start( self ):
-    self._results = self._omni_completer.ComputeCandidates( self.request_data )
+    self._start_column, self._completions = (
+      self._omni_completer.ComputeCandidates( self.request_data ) )
 
 
   def Done( self ):
@@ -43,8 +44,8 @@ class OmniCompletionRequest( CompletionRequest ):
     return {
       'line': self.request_data[ 'line_num' ],
       'column': self.request_data[ 'column_num' ],
-      'completion_start_column': self.request_data[ 'start_column' ],
-      'completions': self._results
+      'completion_start_column': self._start_column + 1,
+      'completions': self._completions
     }
 
 
