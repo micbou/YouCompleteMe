@@ -36,7 +36,6 @@ from ycm.buffer import ( BufferDict,
                          DIAGNOSTIC_UI_FILETYPES,
                          DIAGNOSTIC_UI_ASYNC_FILETYPES )
 from ycmd import utils
-from ycmd.request_wrap import RequestWrap
 from ycm.omni_completer import OmniCompleter
 from ycm import syntax_parse
 from ycm.client.ycmd_keepalive import YcmdKeepalive
@@ -299,13 +298,12 @@ class YouCompleteMe( object ):
   def SendCompletionRequest( self, force_semantic = False ):
     request_data = BuildRequestData()
     request_data[ 'force_semantic' ] = force_semantic
-    if not self.NativeFiletypeCompletionUsable():
-      wrapped_request_data = RequestWrap( request_data )
-      if self._omnicomp.ShouldUseNow( wrapped_request_data ):
-        self._latest_completion_request = OmniCompletionRequest(
-            self._omnicomp, wrapped_request_data )
-        self._latest_completion_request.Start()
-        return
+    if ( not self.NativeFiletypeCompletionUsable() and
+         self._omnicomp.ShouldUseNow( request_data ) ):
+      self._latest_completion_request = OmniCompletionRequest( self._omnicomp,
+                                                               request_data )
+      self._latest_completion_request.Start()
+      return
 
     self._AddExtraConfDataIfNeeded( request_data )
     self._latest_completion_request = CompletionRequest( request_data )
@@ -508,6 +506,7 @@ class YouCompleteMe( object ):
 
   def OnCurrentIdentifierFinished( self ):
     SendEventNotificationAsync( 'CurrentIdentifierFinished' )
+    self._omnicomp.InvalidateCache()
 
 
   def OnCompleteDone( self ):
