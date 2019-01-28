@@ -27,13 +27,76 @@ import sys
 import vim
 import re
 
-# Can't import these from setup.py because it makes nosetests go crazy.
+from ycm.vimsupport import ReadFile, OnWindows
+
 DIR_OF_CURRENT_SCRIPT = os.path.dirname( os.path.abspath( __file__ ) )
 DIR_OF_YCMD = os.path.join( DIR_OF_CURRENT_SCRIPT, '..', '..', 'third_party',
                             'ycmd' )
 WIN_PYTHON_PATH = os.path.join( sys.exec_prefix, 'python.exe' )
 PYTHON_BINARY_REGEX = re.compile(
   r'python((2(\.[67])?)|(3(\.[3-9])?))?(.exe)?$', re.IGNORECASE )
+EXECUTABLE_FILE_MASK = os.F_OK | os.X_OK
+
+
+def PathToFirstExistingExecutable( executable_name_list ):
+  for executable_name in executable_name_list:
+    path = FindExecutable( executable_name )
+    if path:
+      return path
+  return None
+
+
+def _GetWindowsExecutable( filename ):
+  def _GetPossibleWindowsExecutable( filename ):
+    pathext = [ ext.lower() for ext in
+                os.environ.get( 'PATHEXT', '' ).split( os.pathsep ) ]
+    base, extension = os.path.splitext( filename )
+    if extension.lower() in pathext:
+      return [ filename ]
+    else:
+      return [ base + ext for ext in pathext ]
+
+  for exe in _GetPossibleWindowsExecutable( filename ):
+    if os.path.isfile( exe ):
+      return exe
+  return None
+
+
+# Check that a given file can be accessed as an executable file, so controlling
+# the access mask on Unix and if has a valid extension on Windows. It returns
+# the path to the executable or None if no executable was found.
+def GetExecutable( filename ):
+  if OnWindows():
+    return _GetWindowsExecutable( filename )
+
+  if ( os.path.isfile( filename )
+       and os.access( filename, EXECUTABLE_FILE_MASK ) ):
+    return filename
+  return None
+
+
+# Adapted from https://hg.python.org/cpython/file/3.5/Lib/shutil.py#l1081
+# to be backward compatible with Python2 and more consistent to our codebase.
+def FindExecutable( executable ):
+  # If we're given a path with a directory part, look it up directly rather
+  # than referring to PATH directories. This includes checking relative to the
+  # current directory, e.g. ./script
+  if os.path.dirname( executable ):
+    return GetExecutable( executable )
+
+  paths = os.environ[ 'PATH' ].split( os.pathsep )
+
+  if OnWindows():
+    # The current directory takes precedence on Windows.
+    curdir = os.path.abspath( os.curdir )
+    if curdir not in paths:
+      paths.insert( 0, curdir )
+
+  for path in paths:
+    exe = GetExecutable( os.path.join( path, executable ) )
+    if exe:
+      return exe
+  return None
 
 
 # Not caching the result of this function; users shouldn't have to restart Vim
@@ -42,11 +105,9 @@ PYTHON_BINARY_REGEX = re.compile(
 def PathToPythonInterpreter():
   # Not calling the Python interpreter to check its version as it significantly
   # impacts startup time.
-  from ycmd import utils
-
   python_interpreter = vim.eval( 'g:ycm_server_python_interpreter' )
   if python_interpreter:
-    python_interpreter = utils.FindExecutable( python_interpreter )
+    python_interpreter = FindExecutable( python_interpreter )
     if python_interpreter:
       return python_interpreter
 
@@ -54,15 +115,14 @@ def PathToPythonInterpreter():
                         "does not point to a valid Python 2.7 or 3.4+." )
 
   python_interpreter = _PathToPythonUsedDuringBuild()
-  if python_interpreter and utils.GetExecutable( python_interpreter ):
+  if python_interpreter and GetExecutable( python_interpreter ):
     return python_interpreter
 
   # On UNIX platforms, we use sys.executable as the Python interpreter path.
   # We cannot use sys.executable on Windows because for unknown reasons, it
   # returns the Vim executable. Instead, we use sys.exec_prefix to deduce the
   # interpreter path.
-  python_interpreter = ( WIN_PYTHON_PATH if utils.OnWindows() else
-                         sys.executable )
+  python_interpreter = WIN_PYTHON_PATH if OnWindows() else sys.executable
   if _EndsWithPython( python_interpreter ):
     return python_interpreter
 
@@ -71,9 +131,9 @@ def PathToPythonInterpreter():
   # there; few people wrote theirs to work on py3.
   # So we check 'python2' before 'python' because on some distributions (Arch
   # Linux for example), python refers to python3.
-  python_interpreter = utils.PathToFirstExistingExecutable( [ 'python2',
-                                                              'python',
-                                                              'python3' ] )
+  python_interpreter = PathToFirstExistingExecutable( [ 'python2',
+                                                        'python',
+                                                        'python3' ] )
   if python_interpreter:
     return python_interpreter
 
@@ -83,11 +143,9 @@ def PathToPythonInterpreter():
 
 
 def _PathToPythonUsedDuringBuild():
-  from ycmd import utils
-
   try:
     filepath = os.path.join( DIR_OF_YCMD, 'PYTHON_USED_DURING_BUILDING' )
-    return utils.ReadFile( filepath ).strip()
+    return ReadFile( filepath ).strip()
   # We need to check for IOError for Python2 and OSError for Python3
   except ( IOError, OSError ):
     return None

@@ -22,19 +22,28 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
-import logging
+import hashlib
+import hmac
 import json
+import logging
 import vim
-from future.utils import native
+from future.utils import native, PY2
 from base64 import b64decode, b64encode
-from ycm import vimsupport
-from ycmd.utils import ( GetCurrentDirectory,
-                         ToBytes,
-                         ToUnicode,
-                         urljoin,
-                         urlparse )
-from ycmd.hmac_utils import CreateRequestHmac, CreateHmac, SecureBytesEqual
-from ycmd.responses import ServerError, UnknownExtraConf
+from ycm.vimsupport import ( Confirm,
+                             CurrentLineAndColumn,
+                             FiletypesForBuffer,
+                             GetBufferFilepath,
+                             GetCurrentDirectory,
+                             GetUnsavedAndSpecifiedBufferData,
+                             PostVimMessage,
+                             ToBytes,
+                             ToUnicode )
+
+# Idiom to import urljoin and urlparse on Python 2 and 3.
+if PY2:
+  from urlparse import urljoin, urlparse
+else:
+  from urllib.parse import urljoin, urlparse  # noqa
 
 _HEADERS = { 'content-type': 'application/json' }
 _CONNECT_TIMEOUT_SEC = 0.01
@@ -42,6 +51,15 @@ _CONNECT_TIMEOUT_SEC = 0.01
 _READ_TIMEOUT_SEC = 30
 _HMAC_HEADER = 'x-ycm-hmac'
 _logger = logging.getLogger( __name__ )
+
+CONFIRM_CONF_FILE_MESSAGE = ( 'Found {}. Load? \n\n(Question can be turned '
+                              'off with options, see YCM docs)' )
+
+
+class UnknownExtraConf( Exception ):
+  def __init__( self, message, extra_conf_file ):
+    super( UnknownExtraConf, self ).__init__( message )
+    self.extra_conf_file = extra_conf_file
 
 
 class BaseRequest( object ):
@@ -82,7 +100,7 @@ class BaseRequest( object ):
       try:
         return _JsonFromFuture( future )
       except UnknownExtraConf as e:
-        if vimsupport.Confirm( str( e ) ):
+        if Confirm( str( e ) ):
           _LoadExtraConfFile( e.extra_conf_file )
         else:
           _IgnoreExtraConfFile( e.extra_conf_file )
@@ -216,26 +234,25 @@ def BuildRequestData( buffer_number = None ):
   if buffer_number and current_buffer.number != buffer_number:
     # Cursor position is irrelevant when filepath is not the current buffer.
     buffer_object = vim.buffers[ buffer_number ]
-    filepath = vimsupport.GetBufferFilepath( buffer_object )
+    filepath = GetBufferFilepath( buffer_object )
     return {
       'filepath': filepath,
       'line_num': 1,
       'column_num': 1,
       'working_dir': working_dir,
-      'file_data': vimsupport.GetUnsavedAndSpecifiedBufferData( buffer_object,
-                                                                filepath )
+      'file_data': GetUnsavedAndSpecifiedBufferData( buffer_object, filepath )
     }
 
-  current_filepath = vimsupport.GetBufferFilepath( current_buffer )
-  line, column = vimsupport.CurrentLineAndColumn()
+  current_filepath = GetBufferFilepath( current_buffer )
+  line, column = CurrentLineAndColumn()
 
   return {
     'filepath': current_filepath,
     'line_num': line + 1,
     'column_num': column + 1,
     'working_dir': working_dir,
-    'file_data': vimsupport.GetUnsavedAndSpecifiedBufferData( current_buffer,
-                                                              current_filepath )
+    'file_data': GetUnsavedAndSpecifiedBufferData( current_buffer,
+                                                   current_filepath )
   }
 
 
@@ -243,8 +260,8 @@ def BuildLineRequestData():
   """Same as BuildRequestData but only for the current line. Used as the
   body of the /start_column request to reduce bandwidth."""
   current_buffer = vim.current.buffer
-  current_filepath = vimsupport.GetBufferFilepath( current_buffer )
-  line, column = vimsupport.CurrentLineAndColumn()
+  current_filepath = GetBufferFilepath( current_buffer )
+  line, column = CurrentLineAndColumn()
   return {
     'filepath': current_filepath,
     'line_num': 1,
@@ -252,7 +269,7 @@ def BuildLineRequestData():
     'file_data': {
       current_filepath: {
         'contents': ToUnicode( current_buffer[ line ] ),
-        'filetypes': vimsupport.FiletypesForBuffer( current_buffer )
+        'filetypes': FiletypesForBuffer( current_buffer )
       }
     }
   }
@@ -290,7 +307,7 @@ def DisplayServerException( exception, truncate_message = False ):
   # up often and isn't something that's actionable by the user.
   if 'already being parsed' in serialized_exception:
     return
-  vimsupport.PostVimMessage( serialized_exception, truncate = truncate_message )
+  PostVimMessage( serialized_exception, truncate = truncate_message )
 
 
 def _ToUtf8Json( data ):
@@ -310,8 +327,64 @@ def _BuildUri( handler ):
 
 
 def MakeServerException( data ):
-  if data[ 'exception' ][ 'TYPE' ] == UnknownExtraConf.__name__:
-    return UnknownExtraConf( data[ 'exception' ][ 'extra_conf_file' ] )
+  exception_name = data[ 'exception' ][ 'TYPE' ]
+  message = data[ 'message' ]
+  if exception_name == 'UnknownExtraConf':
+    return UnknownExtraConf( message, data[ 'exception' ][ 'extra_conf_file' ] )
+  return type( exception_name, ( Exception, ), {} )( message )
 
-  return ServerError( '{0}: {1}'.format( data[ 'exception' ][ 'TYPE' ],
-                                         data[ 'message' ] ) )
+
+def CreateHmac( content, hmac_secret ):
+  # Note that py2's str type passes this check (and that's ok)
+  if not isinstance( content, bytes ):
+    raise TypeError( 'content was not of bytes type; you have a bug!' )
+  if not isinstance( hmac_secret, bytes ):
+    raise TypeError( 'hmac_secret was not of bytes type; you have a bug!' )
+
+  return bytes( hmac.new( hmac_secret,
+                          msg = content,
+                          digestmod = hashlib.sha256 ).digest() )
+
+
+def CreateRequestHmac( method, path, body, hmac_secret ):
+  # Note that py2's str type passes this check (and that's ok)
+  if not isinstance( body, bytes ):
+    raise TypeError( 'body was not of bytes type; you have a bug!' )
+  if not isinstance( hmac_secret, bytes ):
+    raise TypeError( 'hmac_secret was not of bytes type; you have a bug!' )
+  if not isinstance( method, bytes ):
+    raise TypeError( 'method was not of bytes type; you have a bug!' )
+  if not isinstance( path, bytes ):
+    raise TypeError( 'path was not of bytes type; you have a bug!' )
+
+  method_hmac = CreateHmac( method, hmac_secret )
+  path_hmac = CreateHmac( path, hmac_secret )
+  body_hmac = CreateHmac( body, hmac_secret )
+
+  joined_hmac_input = bytes().join( ( method_hmac, path_hmac, body_hmac ) )
+  return CreateHmac( joined_hmac_input, hmac_secret )
+
+
+# This is the compare_digest function from python 3.4
+#   http://hg.python.org/cpython/file/460407f35aa9/Lib/hmac.py#l16
+def SecureBytesEqual( a, b ):
+  """Returns the equivalent of 'a == b', but avoids content based short
+  circuiting to reduce the vulnerability to timing attacks."""
+  # Consistent timing matters more here than data type flexibility
+  # We do NOT want to support py2's str type because iterating over them
+  # (below) produces different results.
+  if type( a ) != bytes or type( b ) != bytes:
+    raise TypeError( "inputs must be bytes instances" )
+
+  # We assume the length of the expected digest is public knowledge,
+  # thus this early return isn't leaking anything an attacker wouldn't
+  # already know
+  if len( a ) != len( b ):
+    return False
+
+  # We assume that integers in the bytes range are all cached,
+  # thus timing shouldn't vary much due to integer object creation
+  result = 0
+  for x, y in zip( a, b ):
+    result |= x ^ y
+  return result == 0

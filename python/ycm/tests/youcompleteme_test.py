@@ -48,7 +48,6 @@ from ycm.tests import ( StopServer,
                         YouCompleteMeInstance )
 from ycm.client.base_request import _LoadExtraConfFile
 from ycm.youcompleteme import YouCompleteMe
-from ycmd.responses import ServerError
 from ycm.tests.mock_utils import ( MockAsyncServerResponseDone,
                                    MockAsyncServerResponseInProgress,
                                    MockAsyncServerResponseException )
@@ -89,13 +88,13 @@ def YouCompleteMe_InvalidPythonInterpreterPath_test( post_vim_message ):
       StopServer( ycm )
 
 
-@patch( 'ycmd.utils.PathToFirstExistingExecutable', return_value = None )
+@patch( 'ycm.paths.PathToFirstExistingExecutable', return_value = None )
 @patch( 'ycm.paths._EndsWithPython', return_value = False )
 @patch( 'ycm.vimsupport.PostVimMessage' )
 def YouCompleteMe_NoPythonInterpreterFound_test( post_vim_message, *args ):
   with UserOptions( {} ):
     try:
-      with patch( 'ycmd.utils.ReadFile', side_effect = IOError ):
+      with patch( 'ycm.vimsupport.ReadFile', side_effect = IOError ):
         ycm = YouCompleteMe()
 
       assert_that( ycm.IsServerAlive(), equal_to( False ) )
@@ -365,14 +364,14 @@ def YouCompleteMe_GetDefinedSubcommands_ListFromServer_test( ycm ):
 
 @YouCompleteMeInstance()
 @patch( 'ycm.client.base_request._logger', autospec = True )
-@patch( 'ycm.vimsupport.PostVimMessage', new_callable = ExtendedMock )
+@patch( 'ycm.client.base_request.PostVimMessage', new_callable = ExtendedMock )
 def YouCompleteMe_GetDefinedSubcommands_ErrorFromServer_test( ycm,
                                                               post_vim_message,
                                                               logger ):
   current_buffer = VimBuffer( 'buffer' )
   with MockVimBuffers( [ current_buffer ], [ current_buffer ] ):
     with patch( 'ycm.client.base_request._JsonFromFuture',
-                side_effect = ServerError( 'Server error' ) ):
+                side_effect = Exception( 'Server error' ) ):
       result = ycm.GetDefinedSubcommands()
 
   logger.exception.assert_called_with( 'Error while handling server response' )
@@ -399,7 +398,7 @@ def YouCompleteMe_ShowDetailedDiagnostic_MessageFromServer_test(
 
 
 @YouCompleteMeInstance()
-@patch( 'ycm.vimsupport.PostVimMessage', new_callable = ExtendedMock )
+@patch( 'ycm.client.base_request.PostVimMessage', new_callable = ExtendedMock )
 def YouCompleteMe_ShowDetailedDiagnostic_Exception_test(
   ycm, post_vim_message ):
 

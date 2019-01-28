@@ -30,15 +30,15 @@ import os
 from hamcrest import ( assert_that, calling, contains, empty, equal_to,
                        has_entry, raises )
 from mock import MagicMock, call, patch
-from nose.tools import eq_
+from nose.tools import eq_, ok_
 
 from ycm import vimsupport
 from ycm.tests import PathToTestFile
 from ycm.tests.test_utils import ( CurrentWorkingDirectory, ExtendedMock,
-                                   MockVimBuffers, MockVimModule, Version,
-                                   VimBuffer, VimError )
+                                   MockVimBuffers, MockVimModule, Py2Only,
+                                   Version, VimBuffer, VimError )
+from ycm.vimsupport import ToBytes
 MockVimModule()
-from ycmd.utils import ToBytes
 
 
 @patch( 'vim.eval', new_callable = ExtendedMock )
@@ -2086,3 +2086,56 @@ def OverlapLength_NoOverlap_test():
   eq_( 0, vimsupport.OverlapLength( 'foobar', 'goobar' ) )
   eq_( 0, vimsupport.OverlapLength( 'foobar', '(^($@#$#@' ) )
   eq_( 0, vimsupport.OverlapLength( 'foo bar zoo', 'foo zoo bar' ) )
+
+
+@Py2Only
+def JoinLinesAsUnicode_Py2Bytes_test():
+  value = vimsupport.JoinLinesAsUnicode( [ bytes( 'abc' ), bytes( 'xyz' ) ] )
+  eq_( value, u'abc\nxyz' )
+  ok_( isinstance( value, str ) )
+
+
+@Py2Only
+def JoinLinesAsUnicode_Py2Str_test():
+  value = vimsupport.JoinLinesAsUnicode( [ 'abc', 'xyz' ] )
+  eq_( value, u'abc\nxyz' )
+  ok_( isinstance( value, str ) )
+
+
+@Py2Only
+def JoinLinesAsUnicode_Py2FutureStr_test():
+  value = vimsupport.JoinLinesAsUnicode( [ str( 'abc' ), str( 'xyz' ) ] )
+  eq_( value, u'abc\nxyz' )
+  ok_( isinstance( value, str ) )
+
+
+@Py2Only
+def JoinLinesAsUnicode_Py2Unicode_test():
+  value = vimsupport.JoinLinesAsUnicode( [ u'abc', u'xyz' ] )
+  eq_( value, u'abc\nxyz' )
+  ok_( isinstance( value, str ) )
+
+
+def JoinLinesAsUnicode_Bytes_test():
+  value = vimsupport.JoinLinesAsUnicode( [ bytes( b'abc' ), bytes( b'xyz' ) ] )
+  eq_( value, u'abc\nxyz' )
+  ok_( isinstance( value, str ) )
+
+
+def JoinLinesAsUnicode_Str_test():
+  value = vimsupport.JoinLinesAsUnicode( [ u'abc', u'xyz' ] )
+  eq_( value, u'abc\nxyz' )
+  ok_( isinstance( value, str ) )
+
+
+def JoinLinesAsUnicode_EmptyList_test():
+  value = vimsupport.JoinLinesAsUnicode( [] )
+  eq_( value, u'' )
+  ok_( isinstance( value, str ) )
+
+
+def JoinLinesAsUnicode_BadInput_test():
+  assert_that(
+    calling( vimsupport.JoinLinesAsUnicode ).with_args( [ 42 ] ),
+    raises( ValueError, 'lines must contain either strings or bytes' )
+  )

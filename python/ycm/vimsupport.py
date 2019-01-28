@@ -22,14 +22,14 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
-from future.utils import iterkeys
-import vim
-import os
+from future.utils import iterkeys, PY2
 import json
+import os
 import re
+import sys
+import tempfile
+import vim
 from collections import defaultdict, namedtuple
-from ycmd.utils import ( GetCurrentDirectory, JoinLinesAsUnicode, ToBytes,
-                         ToUnicode )
 
 BUFFER_COMMAND_MAP = { 'same-buffer'      : 'edit',
                        'split'            : 'split',
@@ -1323,3 +1323,97 @@ def OverlapLength( left_string, right_string ):
     if left_string[ -length: ] == right_string[ :length ]:
       best = length
       length += 1
+
+
+# Returns a unicode type; either the new python-future str type or the real
+# unicode type. The difference shouldn't matter.
+def ToUnicode( value ):
+  if not value:
+    return str()
+  if isinstance( value, str ):
+    return value
+  if isinstance( value, bytes ):
+    # All incoming text should be utf8
+    return str( value, 'utf8' )
+  return str( value )
+
+
+# When lines is an iterable of all strings or all bytes, equivalent to
+#   '\n'.join( ToUnicode( lines ) )
+# but faster on large inputs.
+def JoinLinesAsUnicode( lines ):
+  try:
+    first = next( iter( lines ) )
+  except StopIteration:
+    return str()
+
+  if isinstance( first, str ):
+    return ToUnicode( '\n'.join( lines ) )
+  if isinstance( first, bytes ):
+    return ToUnicode( b'\n'.join( lines ) )
+  raise ValueError( 'lines must contain either strings or bytes.' )
+
+
+# Consistently returns the new bytes() type from python-future. Assumes incoming
+# strings are either UTF-8 or unicode (which is converted to UTF-8).
+def ToBytes( value ):
+  if not value:
+    return bytes()
+
+  # This is tricky. On py2, the bytes type from builtins (from python-future) is
+  # a subclass of str. So all of the following are true:
+  #   isinstance(str(), bytes)
+  #   isinstance(bytes(), str)
+  # But they don't behave the same in one important aspect: iterating over a
+  # bytes instance yields ints, while iterating over a (raw, py2) str yields
+  # chars. We want consistent behavior so we force the use of bytes().
+  if type( value ) == bytes:
+    return value
+
+  # This is meant to catch Python 2's native str type.
+  if isinstance( value, bytes ):
+    return bytes( value, encoding = 'utf8' )
+
+  if isinstance( value, str ):
+    # On py2, with `from builtins import *` imported, the following is true:
+    #
+    #   bytes(str(u'abc'), 'utf8') == b"b'abc'"
+    #
+    # Obviously this is a bug in python-future. So we work around it. Also filed
+    # upstream at: https://github.com/PythonCharmers/python-future/issues/193
+    # We can't just return value.encode( 'utf8' ) on both py2 & py3 because on
+    # py2 that *sometimes* returns the built-in str type instead of the newbytes
+    # type from python-future.
+    if PY2:
+      return bytes( value.encode( 'utf8' ), encoding = 'utf8' )
+    else:
+      return bytes( value, encoding = 'utf8' )
+
+  # This is meant to catch `int` and similar non-string/bytes types.
+  return ToBytes( str( value ) )
+
+
+def GetCurrentDirectory():
+  """Returns the current directory as an unicode object. If the current
+  directory does not exist anymore, returns the temporary folder instead."""
+  try:
+    if PY2:
+      return os.getcwdu()
+    return os.getcwd()
+  # os.getcwdu throws an OSError exception when the current directory has been
+  # deleted while os.getcwd throws a FileNotFoundError, which is a subclass of
+  # OSError.
+  except OSError:
+    return tempfile.gettempdir()
+
+
+# Python 3 complains on the common open(path).read() idiom because the file
+# doesn't get closed. So, a helper func.
+# Also, all files we read are UTF-8.
+def ReadFile( filepath ):
+  with open( filepath, encoding = 'utf8' ) as f:
+    return f.read()
+
+
+def OnWindows():
+  return sys.platform == 'win32'

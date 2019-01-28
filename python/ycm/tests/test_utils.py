@@ -34,7 +34,12 @@ import os
 import re
 import sys
 
-from ycmd.utils import GetCurrentDirectory, ToBytes, ToUnicode
+try:
+  from unittest import skipIf
+except ImportError:
+  from unittest2 import skipIf
+
+Py2Only = skipIf( not PY2, 'Python 2 only' )
 
 
 BUFNR_REGEX = re.compile( '^bufnr\\(\'(?P<buffer_filename>.+)\', ([01])\\)$' )
@@ -599,6 +604,16 @@ def MockVimBuffers( buffers, window_buffers, cursor_position = ( 1, 1 ) ):
         yield VIM_MOCK
 
 
+class VimError( Exception ):
+
+  def __init__( self, code ):
+    self.code = code
+
+
+  def __str__( self ):
+    return repr( self.code )
+
+
 def MockVimModule():
   """The 'vim' module is something that is only present when running inside the
   Vim Python interpreter, so we replace it with a MagicMock for tests. If you
@@ -629,14 +644,8 @@ def MockVimModule():
   return VIM_MOCK
 
 
-class VimError( Exception ):
-
-  def __init__( self, code ):
-    self.code = code
-
-
-  def __str__( self ):
-    return repr( self.code )
+MockVimModule()
+from ycm.vimsupport import GetCurrentDirectory, ToBytes, ToUnicode
 
 
 class ExtendedMock( MagicMock ):

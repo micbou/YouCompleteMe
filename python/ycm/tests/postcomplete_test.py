@@ -1,6 +1,6 @@
 # encoding: utf-8
 #
-# Copyright (C) 2015-2016 YouCompleteMe contributors
+# Copyright (C) 2015-2019 YouCompleteMe contributors
 #
 # This file is part of YouCompleteMe.
 #
@@ -32,11 +32,11 @@ from mock import MagicMock, DEFAULT, patch
 from nose.tools import eq_, ok_
 
 from ycm import vimsupport
-from ycmd.utils import ToBytes
 from ycm.client.completion_request import ( CompletionRequest,
                                             _FilterToMatchingCompletions,
                                             _GetRequiredNamespaceImport )
 from ycm.client.omni_completion_request import OmniCompletionRequest
+from ycm.vimsupport import ToBytes
 
 
 def CompleteItemIs( word, abbr = None, menu = None,

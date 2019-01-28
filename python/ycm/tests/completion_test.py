@@ -34,7 +34,6 @@ from mock import call, MagicMock, patch
 from nose.tools import ok_
 
 from ycm.tests import PathToTestFile, YouCompleteMeInstance
-from ycmd.responses import ServerError
 
 
 @contextlib.contextmanager
@@ -80,7 +79,7 @@ def SendCompletionRequest_UnicodeWorkingDirectory_test( ycm ):
 
 
 @YouCompleteMeInstance()
-@patch( 'ycm.vimsupport.PostVimMessage', new_callable = ExtendedMock )
+@patch( 'ycm.client.base_request.PostVimMessage', new_callable = ExtendedMock )
 def SendCompletionRequest_ResponseContainingError_test( ycm, post_vim_message ):
   current_buffer = VimBuffer( 'buffer' )
 
@@ -112,7 +111,7 @@ def SendCompletionRequest_ResponseContainingError_test( ycm, post_vim_message ):
       ok_( ycm.CompletionRequestReady() )
       response = ycm.GetCompletionResponse()
       post_vim_message.assert_has_exact_calls( [
-        call( 'Exception: message', truncate = True )
+        call( 'message', truncate = True )
       ] )
       assert_that(
         response,
@@ -133,13 +132,13 @@ def SendCompletionRequest_ResponseContainingError_test( ycm, post_vim_message ):
 
 @YouCompleteMeInstance()
 @patch( 'ycm.client.base_request._logger', autospec = True )
-@patch( 'ycm.vimsupport.PostVimMessage', new_callable = ExtendedMock )
+@patch( 'ycm.client.base_request.PostVimMessage', new_callable = ExtendedMock )
 def SendCompletionRequest_ErrorFromServer_test( ycm,
                                                 post_vim_message,
                                                 logger ):
   current_buffer = VimBuffer( 'buffer' )
   with MockVimBuffers( [ current_buffer ], [ current_buffer ] ):
-    with MockCompletionRequest( ServerError( 'Server error' ) ):
+    with MockCompletionRequest( Exception( 'Server error' ) ):
       ycm.SendCompletionRequest()
       ok_( ycm.CompletionRequestReady() )
       response = ycm.GetCompletionResponse()
