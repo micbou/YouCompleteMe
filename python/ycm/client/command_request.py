@@ -1,4 +1,4 @@
-# Copyright (C) 2013  Google Inc.
+# Copyright (C) 2013-2019 YouCompleteMe
 #
 # This file is part of YouCompleteMe.
 #
@@ -24,7 +24,7 @@ from builtins import *  # noqa
 
 from ycm.client.base_request import BaseRequest, BuildRequestData
 from ycm import vimsupport
-from ycmd.utils import ToUnicode
+from ycm.vimsupport import ToUnicode
 
 
 def _EnsureBackwardsCompatibility( arguments ):

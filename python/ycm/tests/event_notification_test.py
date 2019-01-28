@@ -35,8 +35,7 @@ import os
 from ycm.tests import ( PathToTestFile, test_utils, YouCompleteMeInstance,
                         WaitUntilReady )
 from ycm.vimsupport import SIGN_BUFFER_ID_INITIAL_VALUE
-from ycmd.responses import ( BuildDiagnosticData, Diagnostic, Location, Range,
-                             UnknownExtraConf, ServerError )
+from ycm.client.base_request import UnknownExtraConf
 
 from hamcrest import ( assert_that, contains, empty, has_entries, has_entry,
                        has_item, has_items, has_key, is_not )
@@ -94,7 +93,7 @@ def MockEventNotification( response_method, native_filetype_completer = True ):
         yield
 
 
-@patch( 'ycm.vimsupport.PostVimMessage', new_callable = ExtendedMock )
+@patch( 'ycm.client.base_request.PostVimMessage', new_callable = ExtendedMock )
 @YouCompleteMeInstance()
 def EventNotification_FileReadyToParse_NonDiagnostic_Error_test(
     ycm, post_vim_message ):
@@ -105,7 +104,7 @@ def EventNotification_FileReadyToParse_NonDiagnostic_Error_test(
   ERROR_TEXT = 'Some completer response text'
 
   def ErrorResponse( *args ):
-    raise ServerError( ERROR_TEXT )
+    raise Exception( ERROR_TEXT )
 
   with MockArbitraryBuffer( 'some_filetype' ):
     with MockEventNotification( ErrorResponse ):
@@ -172,7 +171,7 @@ def EventNotification_FileReadyToParse_NonDiagnostic_ConfirmExtraConf_test(
               'turned off with options, see YCM docs)' )
 
   def UnknownExtraConfResponse( *args ):
-    raise UnknownExtraConf( FILE_NAME )
+    raise UnknownExtraConf( MESSAGE, FILE_NAME )
 
   with patch( 'ycm.client.base_request.BaseRequest.PostDataToHandler',
               new_callable = ExtendedMock ) as post_data_to_handler:
@@ -281,11 +280,29 @@ def _Check_FileReadyToParse_Diagnostic_Error( ycm ):
   # Tests Vim sign placement and error/warning count python API
   # when one error is returned.
   def DiagnosticResponse( *args ):
-    start = Location( 1, 2, 'TEST_BUFFER' )
-    end = Location( 1, 4, 'TEST_BUFFER' )
-    extent = Range( start, end )
-    diagnostic = Diagnostic( [], start, extent, 'expected ;', 'ERROR' )
-    return [ BuildDiagnosticData( diagnostic ) ]
+    return [ {
+      'kind': 'ERROR',
+      'text': 'expected ;',
+      'location': {
+        'filepath': 'TEST_BUFFER',
+        'line_num': 1,
+        'column_num': 2
+      },
+      'location_extent': {
+        'start': {
+          'filepath': 'TEST_BUFFER',
+          'line_num': 1,
+          'column_num': 2
+        },
+        'end': {
+          'filepath': 'TEST_BUFFER',
+          'line_num': 1,
+          'column_num': 4
+        }
+      },
+      'ranges': [],
+      'fixit_available': False
+    } ]
 
   with MockArbitraryBuffer( 'cpp' ):
     with MockEventNotification( DiagnosticResponse ):
@@ -336,11 +353,29 @@ def _Check_FileReadyToParse_Diagnostic_Warning( ycm ):
   # when one warning is returned.
   # Should be called after _Check_FileReadyToParse_Diagnostic_Error
   def DiagnosticResponse( *args ):
-    start = Location( 2, 2, 'TEST_BUFFER' )
-    end = Location( 2, 4, 'TEST_BUFFER' )
-    extent = Range( start, end )
-    diagnostic = Diagnostic( [], start, extent, 'cast', 'WARNING' )
-    return [ BuildDiagnosticData( diagnostic ) ]
+    return [ {
+      'kind': 'WARNING',
+      'text': 'cast',
+      'location': {
+        'filepath': 'TEST_BUFFER',
+        'line_num': 2,
+        'column_num': 2
+      },
+      'location_extent': {
+        'start': {
+          'filepath': 'TEST_BUFFER',
+          'line_num': 2,
+          'column_num': 2
+        },
+        'end': {
+          'filepath': 'TEST_BUFFER',
+          'line_num': 2,
+          'column_num': 4
+        }
+      },
+      'ranges': [],
+      'fixit_available': False
+    } ]
 
   with MockArbitraryBuffer( 'cpp' ):
     with MockEventNotification( DiagnosticResponse ):

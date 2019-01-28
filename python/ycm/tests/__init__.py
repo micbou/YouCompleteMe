@@ -35,7 +35,6 @@ import warnings
 from ycm.client.base_request import BaseRequest
 from ycm.tests import test_utils
 from ycm.youcompleteme import YouCompleteMe
-from ycmd.utils import CloseStandardStreams, WaitUntilProcessIsTerminated
 
 # The default options which are required for a working YouCompleteMe object.
 DEFAULT_CLIENT_OPTIONS = {
@@ -90,13 +89,36 @@ def WaitUntilReady( timeout = 5 ):
     try:
       if time.time() > expiration:
         raise RuntimeError( 'Waited for the server to be ready '
-                            'for {0} seconds, aborting.'.format( timeout ) )
+                            'for {} seconds, aborting.'.format( timeout ) )
       if _IsReady():
         return
     except requests.exceptions.ConnectionError:
       pass
     finally:
       time.sleep( 0.1 )
+
+
+def ProcessIsRunning( handle ):
+  return handle is not None and handle.poll() is None
+
+
+def WaitUntilProcessIsTerminated( handle, timeout = 5 ):
+  expiration = time.time() + timeout
+  while True:
+    if time.time() > expiration:
+      raise RuntimeError( 'Waited process to terminate for {} seconds, '
+                          'aborting.'.format( timeout ) )
+    if not ProcessIsRunning( handle ):
+      return
+    time.sleep( 0.1 )
+
+
+def CloseStandardStreams( handle ):
+  if not handle:
+    return
+  for stream in [ handle.stdin, handle.stdout, handle.stderr ]:
+    if stream:
+      stream.close()
 
 
 def StopServer( ycm ):

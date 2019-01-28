@@ -22,12 +22,14 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
-from future.utils import iteritems
+from future.utils import iteritems, PY2
 import base64
 import json
 import logging
 import os
 import signal
+import socket
+import subprocess
 import vim
 from subprocess import PIPE
 from tempfile import NamedTemporaryFile
@@ -35,7 +37,6 @@ from ycm import paths, vimsupport
 from ycm.buffer import ( BufferDict,
                          DIAGNOSTIC_UI_FILETYPES,
                          DIAGNOSTIC_UI_ASYNC_FILETYPES )
-from ycmd import utils
 from ycm.omni_completer import OmniCompleter
 from ycm import syntax_parse
 from ycm.client.ycmd_keepalive import YcmdKeepalive
@@ -101,9 +102,94 @@ SERVER_IDLE_SUICIDE_SECONDS = 1800  # 30 minutes
 CLIENT_LOGFILE_FORMAT = 'ycm_'
 SERVER_LOGFILE_FORMAT = 'ycmd_{port}_{std}_'
 
+# Creation flag to disable creating a console window on Windows. See
+# https://msdn.microsoft.com/en-us/library/windows/desktop/ms684863.aspx
+CREATE_NO_WINDOW = 0x08000000
 # Flag to set a file handle inheritable by child processes on Windows. See
 # https://msdn.microsoft.com/en-us/library/ms724935.aspx
 HANDLE_FLAG_INHERIT = 0x00000001
+
+
+def GetUnusedLocalhostPort():
+  sock = socket.socket()
+  # This tells the OS to give us any free port in the range [1024 - 65535]
+  sock.bind( ( '', 0 ) )
+  port = sock.getsockname()[ 1 ]
+  sock.close()
+  return port
+
+
+def CreateLogfile( prefix = '' ):
+  with NamedTemporaryFile( prefix = prefix,
+                           suffix = '.log',
+                           delete = False ) as logfile:
+    return logfile.name
+
+
+def RemoveIfExists( filename ):
+  try:
+    os.remove( filename )
+  except OSError:
+    pass
+
+
+# A wrapper for subprocess.Popen that fixes quirks on Windows.
+def SafePopen( args, **kwargs ):
+  if vimsupport.OnWindows():
+    # We need this to start the server otherwise bad things happen.
+    # See issue #637.
+    if kwargs.get( 'stdin_windows' ) is PIPE:
+      kwargs[ 'stdin' ] = PIPE
+    # Do not create a console window
+    kwargs[ 'creationflags' ] = CREATE_NO_WINDOW
+    # Python 2 fails to spawn a process from a command containing unicode
+    # characters on Windows.  See https://bugs.python.org/issue19264 and
+    # http://bugs.python.org/issue1759845.
+    # Since paths are likely to contains such characters, we convert them to
+    # short ones to obtain paths with only ascii characters.
+    if PY2:
+      args = ConvertArgsToShortPath( args )
+
+  kwargs.pop( 'stdin_windows', None )
+  return subprocess.Popen( args, **kwargs )
+
+
+# Convert paths in arguments command to short path ones
+def ConvertArgsToShortPath( args ):
+  def ConvertIfPath( arg ):
+    if os.path.exists( arg ):
+      return GetShortPathName( arg )
+    return arg
+
+  if isinstance( args, str ) or isinstance( args, bytes ):
+    return ConvertIfPath( args )
+  return [ ConvertIfPath( arg ) for arg in args ]
+
+
+# Get the Windows short path name.
+# Based on http://stackoverflow.com/a/23598461/200291
+def GetShortPathName( path ):
+  if not vimsupport.OnWindows():
+    return path
+
+  from ctypes import windll, wintypes, create_unicode_buffer
+
+  # Set the GetShortPathNameW prototype
+  _GetShortPathNameW = windll.kernel32.GetShortPathNameW
+  _GetShortPathNameW.argtypes = [ wintypes.LPCWSTR,
+                                  wintypes.LPWSTR,
+                                  wintypes.DWORD ]
+  _GetShortPathNameW.restype = wintypes.DWORD
+
+  output_buf_size = 0
+
+  while True:
+    output_buf = create_unicode_buffer( output_buf_size )
+    needed = _GetShortPathNameW( path, output_buf, output_buf_size )
+    if output_buf_size >= needed:
+      return output_buf.value
+    else:
+      output_buf_size = needed
 
 
 class YouCompleteMe( object ):
@@ -142,7 +228,7 @@ class YouCompleteMe( object ):
 
     hmac_secret = os.urandom( HMAC_SECRET_LENGTH )
     options_dict = dict( self._user_options )
-    options_dict[ 'hmac_secret' ] = utils.ToUnicode(
+    options_dict[ 'hmac_secret' ] = vimsupport.ToUnicode(
       base64.b64encode( hmac_secret ) )
     options_dict[ 'server_keep_logfiles' ] = self._user_options[
       'keep_logfiles' ]
@@ -151,7 +237,7 @@ class YouCompleteMe( object ):
     with NamedTemporaryFile( delete = False, mode = 'w+' ) as options_file:
       json.dump( options_dict, options_file )
 
-    server_port = utils.GetUnusedLocalhostPort()
+    server_port = GetUnusedLocalhostPort()
 
     BaseRequest.server_location = 'http://127.0.0.1:' + str( server_port )
     BaseRequest.hmac_secret = hmac_secret
@@ -175,9 +261,9 @@ class YouCompleteMe( object ):
              '--idle_suicide_seconds={0}'.format(
                 SERVER_IDLE_SUICIDE_SECONDS ) ]
 
-    self._server_stdout = utils.CreateLogfile(
+    self._server_stdout = CreateLogfile(
         SERVER_LOGFILE_FORMAT.format( port = server_port, std = 'stdout' ) )
-    self._server_stderr = utils.CreateLogfile(
+    self._server_stderr = CreateLogfile(
         SERVER_LOGFILE_FORMAT.format( port = server_port, std = 'stderr' ) )
     args.append( '--stdout={0}'.format( self._server_stdout ) )
     args.append( '--stderr={0}'.format( self._server_stderr ) )
@@ -185,13 +271,15 @@ class YouCompleteMe( object ):
     if self._user_options[ 'keep_logfiles' ]:
       args.append( '--keep_logfiles' )
 
-    self._server_popen = utils.SafePopen( args, stdin_windows = PIPE,
-                                          stdout = PIPE, stderr = PIPE )
+    self._server_popen = SafePopen( args,
+                                    stdin_windows = PIPE,
+                                    stdout = PIPE,
+                                    stderr = PIPE )
 
 
   def _SetUpLogging( self ):
     def FreeFileFromOtherProcesses( file_object ):
-      if utils.OnWindows():
+      if vimsupport.OnWindows():
         from ctypes import windll
         import msvcrt
 
@@ -200,7 +288,7 @@ class YouCompleteMe( object ):
                                               HANDLE_FLAG_INHERIT,
                                               0 )
 
-    self._client_logfile = utils.CreateLogfile( CLIENT_LOGFILE_FORMAT )
+    self._client_logfile = CreateLogfile( CLIENT_LOGFILE_FORMAT )
 
     handler = logging.FileHandler( self._client_logfile )
 
@@ -486,6 +574,7 @@ class YouCompleteMe( object ):
 
   def OnInsertLeave( self ):
     SendEventNotificationAsync( 'InsertLeave' )
+    self._omnicomp.InvalidateCache()
 
 
   def OnCursorMoved( self ):
@@ -496,7 +585,7 @@ class YouCompleteMe( object ):
     logging.shutdown()
     if not self._user_options[ 'keep_logfiles' ]:
       if self._client_logfile:
-        utils.RemoveIfExists( self._client_logfile )
+        RemoveIfExists( self._client_logfile )
 
 
   def OnVimLeave( self ):
@@ -728,7 +817,7 @@ class YouCompleteMe( object ):
   def _AddTagsFilesIfNeeded( self, extra_data ):
     def GetTagFiles():
       tag_files = vim.eval( 'tagfiles()' )
-      return [ os.path.join( utils.GetCurrentDirectory(), tag_file )
+      return [ os.path.join( vimsupport.GetCurrentDirectory(), tag_file )
                for tag_file in tag_files ]
 
     if not self._user_options[ 'collect_identifiers_from_tags_files' ]:
