@@ -331,6 +331,9 @@ def MakeServerException( data ):
   message = data[ 'message' ]
   if exception_name == 'UnknownExtraConf':
     return UnknownExtraConf( message, data[ 'exception' ][ 'extra_conf_file' ] )
+  # type() first argument requires bytes on Python 2.
+  if PY2:
+    exception_name = ToBytes( exception_name )
   return type( exception_name, ( Exception, ), {} )( message )
 
 

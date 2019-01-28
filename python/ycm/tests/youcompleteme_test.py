@@ -94,7 +94,7 @@ def YouCompleteMe_InvalidPythonInterpreterPath_test( post_vim_message ):
 def YouCompleteMe_NoPythonInterpreterFound_test( post_vim_message, *args ):
   with UserOptions( {} ):
     try:
-      with patch( 'ycm.vimsupport.ReadFile', side_effect = IOError ):
+      with patch( 'ycm.paths.ReadFile', side_effect = IOError ):
         ycm = YouCompleteMe()
 
       assert_that( ycm.IsServerAlive(), equal_to( False ) )
