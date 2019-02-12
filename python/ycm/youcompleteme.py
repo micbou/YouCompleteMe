@@ -35,6 +35,7 @@ from ycm import base, paths, vimsupport
 from ycm.buffer import ( BufferDict,
                          DIAGNOSTIC_UI_FILETYPES,
                          DIAGNOSTIC_UI_ASYNC_FILETYPES )
+from ycm.completion_window import CompletionWindow
 from ycmd import utils
 from ycmd.request_wrap import RequestWrap
 from ycm.omni_completer import OmniCompleter
@@ -42,7 +43,7 @@ from ycm import syntax_parse
 from ycm.client.ycmd_keepalive import YcmdKeepalive
 from ycm.client.base_request import BaseRequest, BuildRequestData
 from ycm.client.completer_available_request import SendCompleterAvailableRequest
-from ycm.client.command_request import SendCommandRequest
+from ycm.client.command_request import CommandRequestSender
 from ycm.client.completion_request import CompletionRequest
 from ycm.client.debug_info_request import ( SendDebugInfoRequest,
                                             FormatDebugInfoResponse )
@@ -121,6 +122,8 @@ class YouCompleteMe( object ):
     self._filetypes_with_keywords_loaded = set()
     self._ycmd_keepalive = YcmdKeepalive()
     self._server_is_ready_with_cache = False
+    self._completion_window = None
+    self._command_request_sender = None
     self._SetUpLogging()
     self._SetUpServer()
     self._ycmd_keepalive.Start()
@@ -136,6 +139,9 @@ class YouCompleteMe( object ):
     self._user_options = base.GetUserOptions()
     self._omnicomp = OmniCompleter( self._user_options )
     self._buffers = BufferDict( self._user_options )
+    self._completion_window = CompletionWindow( self._user_options )
+    self._command_request_sender = CommandRequestSender(
+      self._completion_window )
 
     self._SetLogLevel()
 
@@ -342,10 +348,11 @@ class YouCompleteMe( object ):
       extra_data.update( vimsupport.BuildRange( start_line, end_line ) )
     self._AddExtraConfDataIfNeeded( extra_data )
 
-    return SendCommandRequest( final_arguments,
-                               modifiers,
-                               self._user_options[ 'goto_buffer_command' ],
-                               extra_data )
+    return self._command_request_sender.Send(
+      final_arguments,
+      modifiers,
+      self._user_options[ 'goto_buffer_command' ],
+      extra_data )
 
 
   def GetDefinedSubcommands( self ):
@@ -704,6 +711,10 @@ class YouCompleteMe( object ):
 
     if self._user_options[ 'open_loclist_on_ycm_diags' ]:
       vimsupport.OpenLocationList( focus = True )
+
+
+  def GetCompletionWindow( self ):
+    return self._completion_window
 
 
   def _AddSyntaxDataIfNeeded( self, extra_data ):

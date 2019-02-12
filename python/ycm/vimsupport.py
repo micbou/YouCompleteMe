@@ -1244,3 +1244,7 @@ def AutoCloseOnCurrentBuffer( name ):
   vim.command( 'autocmd WinLeave <buffer> '
                'if bufnr( "%" ) == expand( "<abuf>" ) | q | endif' )
   vim.command( 'augroup END' )
+
+
+def SendKeys( keys ):
+  vim.eval( 'feedkeys( "{}", "n" )'.format( keys ) )

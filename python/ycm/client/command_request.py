@@ -22,9 +22,13 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
+import os
+from functools import partial
+
 from ycm.client.base_request import BaseRequest, BuildRequestData
+from ycm.completion_window import CompletionWindow
 from ycm import vimsupport
-from ycmd.utils import ToUnicode
+from ycmd.utils import OnWindows, ToUnicode
 
 
 def _EnsureBackwardsCompatibility( arguments ):
@@ -61,7 +65,7 @@ class CommandRequest( BaseRequest ):
     return self._response
 
 
-  def RunPostCommandActionsIfNeeded( self, modifiers ):
+  def RunPostCommandActionsIfNeeded( self, completion_window, modifiers ):
     if not self.Done() or self._response is None:
       return
 
@@ -73,6 +77,9 @@ class CommandRequest( BaseRequest ):
 
     if 'fixits' in self._response:
       return self._HandleFixitResponse()
+
+    if 'symbols' in self._response:
+      return self._HandleSymbolResponse( completion_window, modifiers )
 
     if 'message' in self._response:
       return self._HandleMessageResponse()
@@ -122,6 +129,17 @@ class CommandRequest( BaseRequest ):
         vimsupport.PostVimMessage( str( e ) )
 
 
+  def _HandleSymbolResponse( self, completion_window, modifiers ):
+    completion_window.Open()
+    confirm_callback = partial( _OnConfirmSymbol,
+                                modifiers = modifiers,
+                                buffer_command = self._buffer_command )
+    completion_window.Populate( self._response[ 'symbols' ],
+                                'name',
+                                confirm_callback,
+                                _FormatSymbols )
+
+
   def _HandleBasicResponse( self ):
     vimsupport.PostVimMessage( self._response, warning = False )
 
@@ -134,15 +152,17 @@ class CommandRequest( BaseRequest ):
     vimsupport.WriteToPreviewWindow( self._response[ 'detailed_info' ] )
 
 
-def SendCommandRequest( arguments,
-                        modifiers,
-                        buffer_command,
-                        extra_data = None ):
-  request = CommandRequest( arguments, buffer_command, extra_data )
-  # This is a blocking call.
-  request.Start()
-  request.RunPostCommandActionsIfNeeded( modifiers )
-  return request.Response()
+class CommandRequestSender( object ):
+  def __init__( self, completion_window ):
+    self._completion_window = completion_window
+
+
+  def Send( self, arguments, modifiers, buffer_command, extra_data = None ):
+    request = CommandRequest( arguments, buffer_command, extra_data )
+    # This is a blocking call.
+    request.Start()
+    request.RunPostCommandActionsIfNeeded( self._completion_window, modifiers )
+    return request.Response()
 
 
 def _BuildQfListItem( goto_data_item ):
@@ -164,3 +184,85 @@ def _BuildQfListItem( goto_data_item ):
     qf_item[ 'col' ] = goto_data_item[ 'column_num' ]
 
   return qf_item
+
+
+def _OnConfirmSymbol( symbol, modifiers, buffer_command ):
+  start = symbol[ 'range' ][ 'start' ]
+  vimsupport.JumpToLocation( start[ 'filepath' ],
+                             start[ 'line_num' ],
+                             start[ 'column_num' ],
+                             modifiers,
+                             buffer_command )
+  # Leave insert mode with the cursor on the current character.
+  vimsupport.SendKeys( "\<ESC>" )
+  column = vimsupport.CurrentColumn()
+  if column != 0:
+    vimsupport.SendKeys( "l" )
+
+
+# Based on the implementation of os.path.expanduser.
+def _GetHomeDirectory():
+  if 'HOME' in os.environ:
+    return os.environ[ 'HOME' ]
+
+  if OnWindows():
+    if 'USERPROFILE' in os.environ:
+      return os.environ[ 'USERPROFILE' ]
+    if 'HOMEPATH' in os.environ:
+      try:
+        drive = os.environ[ 'HOMEDRIVE' ]
+      except KeyError:
+        drive = ''
+      return os.path.join( drive, os.environ[ 'HOMEPATH' ] )
+    return None
+
+  import pwd
+  try:
+    return pwd.getpwuid( os.getuid() ).pw_dir
+  except KeyError:
+    return None
+
+
+def _GetShortestPath( filepath, current_dir, home_dir ):
+  path_relative_to_current_dir = os.path.relpath( filepath, current_dir )
+  if filepath.startswith( home_dir ):
+    filepath = '~' + filepath[ len( home_dir ) : ]
+  if len( filepath ) < len( path_relative_to_current_dir ):
+    return filepath
+  return path_relative_to_current_dir
+
+
+def _ShortenString( string, max_length ):
+  return (
+    string[ : max_length - 1 ] + '…' if len( string ) > max_length else string )
+
+
+def _FormatSymbols( symbols, window_width ):
+  name_length = round( window_width * 0.4 )
+  location_length = round( window_width * 0.2 )
+  description_length = window_width - ( name_length + location_length + 4 )
+
+  current_dir = vimsupport.GetCurrentDirectory()
+  home_dir = _GetHomeDirectory()
+
+  line_format = (
+    '{name:<' + str( name_length ) + '} ' +
+    '{location:<' + str( location_length ) + '} ' +
+    '{kind} ' +
+    '{description:<' + str( description_length ) + '}' )
+  symbols_format = []
+  for symbol in symbols:
+    name = _ShortenString( symbol[ 'name' ], name_length )
+    kind = symbol[ 'kind' ][ 0 ].lower()
+    start = symbol[ 'range' ][ 'start' ]
+    filepath = _GetShortestPath( start[ 'filepath' ], current_dir, home_dir )
+    location = (
+      ':' + str( start[ 'line_num' ] ) + ':' + str( start[ 'column_num' ] ) )
+    filepath = _ShortenString( filepath, location_length - len( location ) )
+    location = filepath + location
+    description = _ShortenString( symbol[ 'description' ], description_length )
+    symbols_format.append( line_format.format( name = name,
+                                               location = location,
+                                               kind = kind,
+                                               description = description ) )
+  return symbols_format

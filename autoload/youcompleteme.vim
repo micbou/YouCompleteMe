@@ -145,6 +145,14 @@ function! youcompleteme#Enable()
     autocmd BufEnter,WinEnter * call s:UpdateMatches()
   augroup END
 
+  augroup ycm_completion_window
+    autocmd BufEnter * call s:OnBufferEnterInCompletionWindow()
+    autocmd User YcmCompletionWindowOpened
+          \ call s:OnBufferEnterInCompletionWindow()
+    autocmd TextChanged,TextChangedI * call s:OnTextChangedInCompletionWindow()
+    autocmd InsertEnter * call s:OnInsertEnterInCompletionWindow()
+  augroup END
+
   " The FileType event is not triggered for the first loaded file. We wait until
   " the server is ready to manually run the s:OnFileTypeSet function.
   let s:pollers.server_ready.id = timer_start(
@@ -250,6 +258,7 @@ try:
   from ycm import base, vimsupport, youcompleteme
 
   ycm_state = youcompleteme.YouCompleteMe()
+  ycm_completion_window = ycm_state.GetCompletionWindow()
 except Exception as error:
   # We don't use PostVimMessage or EchoText from the vimsupport module because
   # importing this module may fail.
@@ -360,10 +369,16 @@ function! s:SetUpSigns()
     highlight link YcmWarningLine SyntasticWarningLine
   endif
 
+  if !hlexists( 'YcmCompletionSelection' )
+    highlight link YcmCompletionSelectionLine PmenuSel
+  endif
+
   exe 'sign define YcmError text=' . g:ycm_error_symbol .
         \ ' texthl=YcmErrorSign linehl=YcmErrorLine'
   exe 'sign define YcmWarning text=' . g:ycm_warning_symbol .
         \ ' texthl=YcmWarningSign linehl=YcmWarningLine'
+  exe 'sign define YcmCompletionSelection' .
+        \ ' linehl=YcmCompletionSelectionLine'
 endfunction
 
 
@@ -470,6 +485,11 @@ function! s:VisitedBufferRequiresReparse()
   endif
 
   return s:AllowedToCompleteInCurrentBuffer()
+endfunction
+
+
+function! s:IsInCompletionWindow()
+  return getbufvar( '%', '&filetype' ) == 'ycm'
 endfunction
 
 
@@ -742,6 +762,74 @@ function! s:OnTextChangedInsertMode()
   if g:ycm_autoclose_preview_window_after_completion
     call s:ClosePreviewWindowIfNeeded()
   endif
+endfunction
+
+
+function! s:OnTextChangedInCompletionWindow()
+  if !s:IsInCompletionWindow()
+    return
+  endif
+
+  exec s:python_command "ycm_completion_window.OnTextChanged()"
+endfunction
+
+
+function! s:OnInsertEnterInCompletionWindow()
+  if !s:IsInCompletionWindow()
+    return
+  endif
+
+  exec s:python_command "ycm_completion_window.OnInsertEnter()"
+endfunction
+
+
+function! s:OnBufferEnterInCompletionWindow()
+  if !s:IsInCompletionWindow()
+    return
+  endif
+
+  call s:SetKeyMappingsInCompletionWindow()
+endfunction
+
+
+function! s:SetKeyMappingsInCompletionWindow()
+  for key in g:ycm_key_list_select_completion
+    exe 'inoremap <buffer> <silent> ' . key .
+          \ ' <C-R>=<SID>SelectInCompletionWindow()<CR>'
+  endfor
+
+  for key in g:ycm_key_list_previous_completion
+    exe 'inoremap <buffer> <silent> ' . key .
+          \ ' <C-R>=<SID>PreviousInCompletionWindow()<CR>'
+  endfor
+
+  " Always remap <CR>.
+  exe 'inoremap <buffer> <silent> <CR> ' .
+        \ '<C-R>=<SID>ConfirmInCompletionWindow()<CR>'
+  for key in g:ycm_key_list_stop_completion
+    exe 'inoremap <buffer> <silent> ' . key .
+          \ ' <C-R>=<SID>ConfirmInCompletionWindow()<CR>'
+  endfor
+endfunction
+
+
+function! s:SelectInCompletionWindow()
+  exec s:python_command "ycm_completion_window.Select()"
+
+  return ''
+endfunction
+
+
+function! s:PreviousInCompletionWindow()
+  exec s:python_command "ycm_completion_window.Previous()"
+
+  return ''
+endfunction
+
+function! s:ConfirmInCompletionWindow()
+  exec s:python_command "ycm_completion_window.Confirm()"
+
+  return ''
 endfunction
 
 
