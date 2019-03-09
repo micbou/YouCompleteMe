@@ -37,6 +37,7 @@ class CompletionRequest( BaseRequest ):
     super( CompletionRequest, self ).__init__()
     self.request_data = request_data
     self._response_future = None
+    self._snippet = None
 
 
   def Start( self ):
@@ -99,9 +100,7 @@ class CompletionRequest( BaseRequest ):
 
       self._OnCompleteDone_FixIt( completion )
 
-      snippet = completion.get( 'snippet', None )
-      if snippet:
-        self._OnCompleteDone_Snippet( completion, snippet )
+      self._snippet = completion.get( 'snippet' )
 
 
   def _GetCompletionsUserMayHaveCompleted( self ):
@@ -155,9 +154,11 @@ class CompletionRequest( BaseRequest ):
                                 silent = True,
                                 cursor_position = cursor_position )
 
-  def _OnCompleteDone_Snippet( self, completion, snippet ):
-    vimsupport.ExpandSnippet( completion[ 'snippet' ],
-                              completion[ 'insertion_text' ] )
+
+  def ExpandSnippet( self ):
+    if self._snippet:
+      vimsupport.ExpandSnippet( self._snippet )
+      self._snippet = None
 
 
 def _GetRequiredNamespaceImport( completion ):

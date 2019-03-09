@@ -713,6 +713,8 @@ function! s:OnTextChangedInsertMode()
     return
   endif
 
+  exec s:python_command "ycm_state.ExpandCompletionSnippet()"
+
   if s:completion_stopped
     let s:completion_stopped = 0
     let s:completion = s:default_completion
