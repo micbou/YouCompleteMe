@@ -1,21 +1,28 @@
 language: generic
 sudo: false
-before_install:
-  - git submodule update --init --recursive
-install:
-  # source because it sets up env vars on some platforms
-  - source ci/travis/travis_install.sh
-script: ./run_tests.py
-after_success:
-  - codecov
+# source because it sets up env vars on some platforms
+install: source ci/travis/travis_install.sh
 env:
   global:
     # Travis can run out of RAM, so we need to be careful here.
     - YCM_CORES=3
     - COVERAGE=true
-  matrix:
-    - YCM_PYTHON_VERSION=2.7
-    - YCM_PYTHON_VERSION=3.4
+    - secure: "Niz4EnRgYb2WcU/m8BxMeIKP7v4+iF+XTtnWzczfnKyGqsBcw+Xlosd4J+Rrh3Rqs6nXQJwxkYAsf5Ejo+SOx8Q22uOWFnGqWyJ2CH4+fPHOIIPwbUW4XUvoJvsjabxqBzZXjOYw1mADsDh9wuQ1V9+zOzzXa1MVAE2C/1bi0yc="
+    - secure: "jNUJkuIIVQrRrQ3lXton8A31pLZSxU3a1h6Zp/EJX6pq3ZxzwINBkIWNfPaU8Bk9S0iD1yXBQDouP5pLDUggYvR2qz2Xc6MIV+Ip0XT9FeCTeN+ka/sYVCbmkMsfp5rvoTvzSEpFuOA9MXVWFhDCewUocTyYD8WfuBuSHz5cR18="
+jobs:
+  include:
+    - name: Python 2.7
+      env: YCM_PYTHON_VERSION=2.7
+      script: ./run_tests.py
+      after_success: codecov
+    - name: Python 3.4
+      env: YCM_PYTHON_VERSION=3.4
+      script: ./run_tests.py
+      after_success: codecov
+    - name: Documentation
+      if: branch = master
+      env: YCM_PYTHON_VERSION=3.4
+      script: ./ci/travis/travis_update_docs.sh
 addons:
   apt:
     sources:
