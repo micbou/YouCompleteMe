@@ -28,6 +28,8 @@ get in touch.
 Please do **NOT** go to #vim on freenode for support. Please contact the
 YouCompleteMe maintainers directly using the [contact details](#contact) below.
 
+Another random change to the docs.
+
 Contents
 --------
 
